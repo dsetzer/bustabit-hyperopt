@@ -1,66 +1,69 @@
-
 import argparse
 from itertools import product
 import numpy as np
-from STPyV8 import JSContext, JSObject
-
-def read_js_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        js_code = file.read()
-    return js_code
-
-def js_object_to_python(js_obj):
-    python_dict = {}
-    for key in js_obj.keys():
-        value = js_obj[key]
-        if isinstance(value, JSObject):
-            python_dict[key] = js_object_to_python(value)
-        else:
-            python_dict[key] = value
-    return python_dict
-
-def extract_config_object(js_code):
-    start_index = js_code.find('var config = {')
-    if start_index == -1:
-        raise FileNotFoundError("Config object not found")
-
-    end_index = start_index
-    brace_count = 0
-    for i, char in enumerate(js_code[start_index:]):
-        if char == '{':
-            brace_count += 1
-        elif char == '}':
-            brace_count -= 1
-            if brace_count == 0:
-                end_index = start_index + i
-                break
-
-    # Extract and evaluate only the config object definition
-    config_code = js_code[start_index:end_index + 1]
-
-    with JSContext() as ctxt:
-        ctxt.eval(config_code)
-        config_object = ctxt.eval("config")
-        config_dict = js_object_to_python(config_object)
-
-    return config_dict
+from prettytable import PrettyTable
+from script import Script
 
 def select_parameters(config_dict):
     parameters = []
     print("Select parameters to optimize:")
+
+    # Create a table to display available parameters
+    available_params_table = PrettyTable()
+    available_params_table.field_names = ["#", "Parameter"]
     for idx, key in enumerate(config_dict.keys()):
-        print(f"{idx + 1}. {key}")
+        available_params_table.add_row([idx + 1, key])
+    print(available_params_table)
+
+    # Function to print selected parameters in a table
+    def print_selected_parameters():
+        selected_params_table = PrettyTable()
+        selected_params_table.field_names = ["Parameter", "Min", "Max", "Step"]
+        for param in parameters:
+            selected_params_table.add_row([param[0], param[1], param[2], param[3]])
+        print("\nSelected Parameters:")
+        print(selected_params_table)
 
     while True:
         choice = input("Select a parameter by number (or 'done' to finish): ")
         if choice.lower() == 'done':
             break
         try:
+            # Handle selection using table index
             selected_key = list(config_dict.keys())[int(choice) - 1]
-            min_value = float(input(f"Enter min value for {selected_key}: "))
-            max_value = float(input(f"Enter max value for {selected_key}: "))
-            step_value = float(input(f"Enter step value for {selected_key}: "))
+            selected_type = config_dict[selected_key]['type']
+            if selected_type == 'multiplier':
+                min_value = float(input(f"Enter min value for {selected_key}: "))
+                if min_value < 1.01 or min_value > 1e6:
+                    print("Invalid min value. Please try again.")
+                    continue
+                max_value = float(input(f"Enter max value for {selected_key}: "))
+                if max_value < 1.01 or max_value > 1e6:
+                    print("Invalid max value. Please try again.")
+                    continue
+                step_value = float(input(f"Enter step value for {selected_key}: "))
+            elif selected_type == 'balance':
+                min_value = float(input(f"Enter min value for {selected_key}: "))
+                if min_value < 100:
+                    print("Invalid min value. Please try again.")
+                    continue
+                max_value = float(input(f"Enter max value for {selected_key}: "))
+                if max_value < 100:
+                    print("Invalid max value. Please try again.")
+                    continue
+                step_value = float(input(f"Enter step value for {selected_key}: "))
+                if step_value < 100:
+                    print("Invalid step value. Please try again.")
+                    continue
+            elif selected_type == 'checkbox':
+                min_value = 0
+                max_value = 1
+                step_value = 1
+            else:
+                print("Invalid type. Please try again.")
+                continue
             parameters.append((selected_key, min_value, max_value, step_value))
+            print_selected_parameters()
         except (ValueError, IndexError):
             print("Invalid choice. Please try again.")
     return parameters
@@ -84,22 +87,22 @@ def main():
     args = parser.parse_args()
 
     if args.script and args.params:
-        # Split the params by space
-        params_list = args.params.split()
         # Non-Interactive Mode
-        js_code = read_js_file(args.script)
-        config_dict = extract_config_object(js_code)
+        script_obj = Script(args.script)
+        params_list = args.params.split()
         parameters = [(param.split(':')[0], *map(float, param.split(':')[1].split(','))) for param in params_list]
     else:
         # Interactive Mode
         js_file_path = input("Enter the path to the JavaScript file: ")
-        js_code = read_js_file(js_file_path)
-        config_dict = extract_config_object(js_code)
-        parameters = select_parameters(config_dict)
+        script_obj = Script(js_file_path)
+        parameters = select_parameters(script_obj.config_dict)
 
-    combinations = generate_parameter_combinations(parameters)
-    print_parameter_combinations(combinations)
+    print("Parameters:")
+    for param in parameters:
+        print(param)
+
+    #combinations = generate_parameter_combinations(parameters)
+    #print_parameter_combinations(combinations)
 
 if __name__ == "__main__":
     main()
-
