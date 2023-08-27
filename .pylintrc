@@ -1,0 +1,9 @@
+[MASTER]
+# Set the maximum line length to 120 characters
+max-line-length=512
+
+[MESSAGES CONTROL]
+# Disable import errors
+disable=C0415
+# Disable missing docstrings for modules, classes, and functions
+disable=C0111
