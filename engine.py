@@ -13,28 +13,22 @@ class UserInfo:
     def __str__(self):
         return f"UserInfo(uname={self.uname}, balance={self.balance}, wagered={self.wagered}, profit={self.profit}, bets={self.bets})"
 
-
 class History:
-    """
-    History class is a circular array of game results with a fixed size.
-    """
-    def __init__(self, size):
-        self.size = size
-        self._history = [None] * size
-        self._index = 0
-        
-    def append(self, game_result):
-        self._history[self._index] = game_result
-        self._index = (self._index + 1) % self.size
-        
-    def first(self):
-        return self._history[self._index]
+  def __init__(self, size=50):
+      self.buffer = deque(maxlen=size)
+
+  def first(self):
+      return self.buffer[0] if self.buffer else None
+
+  def last(self):
+      return self.buffer[-1] if self.buffer else None
+
+  def toArray(self):
+      return list(self.buffer)
+
+  def size(self):
+      return len(self.buffer)
     
-    def last(self):
-        return self._history[self._index - 1]
-    
-    def toArray(self):
-        return self._history[self._index:] + self._history[:self._index]
 
 class Engine(EventEmitter):
   def __init__(self, ):
