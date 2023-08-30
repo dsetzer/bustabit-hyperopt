@@ -19,7 +19,9 @@ engine.on('GAME_ENDED', () => {
     if (!last.wager) return;
     if (last.cashedAt) {
         currBet = Math.max(baseBet, (currBet / (payout / (payout - 1))));
+        log(`We won ${last.wager} bits! Resetting bet to ${currBet} bits`);
     } else {
         currBet *= payout / (payout - 1);
+        log(`We lost ${last.wager} bits. Multiplying bet to ${currBet} bits`);
     }
 });
