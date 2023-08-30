@@ -109,16 +109,14 @@ class Engine(EventEmitter, STPyV8.JSClass):
     def bet(self, wager, payout):
         if self.gameState == "GAME_STARTING":
             # already placed a bet for this round
-            if self.wager is not None:
-                return None
-            
-            self.wager = wager
-            self.payout = payout
-            self.emit('BET_PLACED', {'wager': self.wager, 'payout': self.payout, 'uname': self._userInfo.uname})
-        
+            if self.wager is None:
+                self.wager = wager
+                self.payout = payout
+                self.emit('BET_PLACED', {'wager': self.wager, 'payout': self.payout, 'uname': self._userInfo.uname})
+
         elif not self.stopping and not self.next:
             # queue the bet for the next round
-            self.next = {'wager': wager, 'payout': round(payout * 100) / 100, 'isAuto': False}
+            self.next = {'wager': wager, 'payout': round(payout * 100) / 100}
 
     def cashOut(self):
         pass
