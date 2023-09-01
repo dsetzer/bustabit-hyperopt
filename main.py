@@ -3,6 +3,7 @@ from itertools import product
 import numpy as np
 from prettytable import PrettyTable
 from script import Script
+from simulator import Simulator
 
 def select_parameters(config_dict):
     parameters = []

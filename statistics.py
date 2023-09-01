@@ -1,18 +1,20 @@
+import math
+
 class Statistics:
-    def __init__(self):
+    def __init__(self, initial_balance):
         self.duration = 0
-        self.starting_balance = starting_balance
-        self.balance = starting_balance
-        self.balance_ath = starting_balance
-        self.balance_atl = starting_balance
+        self.starting_balance = initial_balance
+        self.balance = initial_balance
+        self.balance_ath = initial_balance
+        self.balance_atl = initial_balance
         self.games_total = 0
         self.games_played = 0
         self.game_skipped = 0
         self.games_won = 0
         self.games_lost = 0
         self.profit = 0
-        self.lowest_bet = 0
-        self.highest_bet = 0
+        self.lowest_bet = float('inf')
+        self.highest_bet = float('-inf')
         self.longest_win_streak = 0
         self.longest_streak_gain = 0
         self.since_last_win = 0
@@ -28,21 +30,21 @@ class Statistics:
         self.total_won = 0
         self.total_lost = 0
 
-    def update(self, game):
+    def update(self, engine):
+        lastGame = engine.history.first()
         self.games_total += 1
-        if game['wager'] is not None:
+        self.duration += math.log(lastGame['bust']) / 0.00006  # Assuming targetPayout is available in engine
+        if lastGame['wager'] is not None:
             self.games_played += 1
-            duration += Math.log(config.targetPayout.value) / 0.00006
-            self.total_wagered += game['wager']
+            self.total_wagered += lastGame['wager']
+            if lastGame['wager'] < self.lowest_bet:
+                self.lowest_bet = lastGame['wager']
+            elif lastGame['wager'] > self.highest_bet:
+                self.highest_bet = lastGame['wager']
 
-            if game['wager'] < self.lowest_bet:
-                self.lowest_bet = game['wager']
-            elif game['wager'] > self.highest_bet:
-                self.highest_bet = game['wager']
-
-            if game['cashedAt'] is not None:
+            if lastGame['cashedAt'] is not None:
                 self.games_won += 1
-                winnings = game['wager'] * game['cashedAt']
+                winnings = lastGame['wager'] * lastGame['cashedAt']
                 self.total_won += winnings
                 self.balance += winnings
                 self.since_last_win = 0
@@ -53,28 +55,29 @@ class Statistics:
                     self.longest_streak_gain = self.streak_gain
             else:
                 self.games_lost += 1
-                self.total_lost += game['wager']
-                self.balance -= game['wager']
+                self.total_lost += lastGame['wager']
+                self.balance -= lastGame['wager']
                 self.since_last_win += 1
                 self.since_last_lose = 0
-                self.streak_cost += game['wager']
+                self.streak_cost += lastGame['wager']
                 if self.since_last_win > self.longest_lose_streak:
                     self.longest_lose_streak = self.since_last_win
                     self.longest_streak_cost = self.streak_cost
+
+            if self.balance > self.balance_ath:
+                self.balance_ath = self.balance
+            elif self.balance < self.balance_atl:
+                self.balance_atl = self.balance
+
+            self.profit = self.balance - self.starting_balance
+            if self.profit > self.profit_ath:
+                self.profit_ath = self.profit
+            elif self.profit < self.profit_atl:
+                self.profit_atl = self.profit
         else:
             self.game_skipped += 1
 
-        if self.balance > self.balance_ath:
-            self.balance_ath = self.balance
-        elif self.balance < self.balance_atl:
-            self.balance_atl = self.balance
-
-        self.profit = self.balance - self.starting_balance
-        if self.profit > self.profit_ath:
-            self.profit_ath = self.profit
-        elif self.profit < self.profit_atl:
-            self.profit_atl = self.profit
-
+        print(self.duration, self.profit)
         self.profit_per_hour = self.profit / (self.duration / 3600)
 
 

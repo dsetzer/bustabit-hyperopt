@@ -4,7 +4,7 @@ var config = {
     waitNum: { type: 'number', label: 'Wait Skips', value: 3 }
 };
 Object.entries(config).forEach(c=>this[c[0]]=c[1].value);
-
+log(`Script is running with baseBet: ${baseBet}, payout: ${payout}, waitNum: ${waitNum}`);
 let currBet = baseBet, since = 0;
 
 engine.on('GAME_STARTING', () => {
@@ -18,10 +18,15 @@ engine.on('GAME_ENDED', () => {
     since += (last.bust < payout) ? 1 : -since;
     if (!last.wager) return;
     if (last.cashedAt) {
-        currBet = Math.max(baseBet, (currBet / (payout / (payout - 1))));
+        currBet = baseBet;
         log(`We won ${last.wager} bits! Resetting bet to ${currBet} bits`);
     } else {
         currBet *= payout / (payout - 1);
         log(`We lost ${last.wager} bits. Multiplying bet to ${currBet} bits`);
     }
+    log(`Current Streak: ${since}. Balance ${userInfo.balance / 100} bits`);
 });
+
+function roundBit(bet){
+    return Math.max(100, Math.round(bet / 100) * 100);
+}
