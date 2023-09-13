@@ -36,6 +36,10 @@ class Statistics:
         self.duration += math.log(lastGame['bust']) / 0.00006  # Assuming targetPayout is available in engine
         if lastGame['wager'] is not None:
             self.games_played += 1
+            # update userinfo stats
+            engine._userInfo.wagers += 1
+            engine._userInfo.wagered += lastGame['wager']
+            # update stats
             self.total_wagered += lastGame['wager']
             if lastGame['wager'] < self.lowest_bet:
                 self.lowest_bet = lastGame['wager']
@@ -43,6 +47,9 @@ class Statistics:
                 self.highest_bet = lastGame['wager']
 
             if lastGame['cashedAt'] is not None:
+                # update userinfo stats
+                engine._userInfo.profit += (lastGame['wager'] * (lastGame['cashedAt'] - 1))
+                # update stats
                 self.games_won += 1
                 winnings = lastGame['wager'] * lastGame['cashedAt']
                 self.total_won += winnings
@@ -54,6 +61,9 @@ class Statistics:
                     self.longest_win_streak = self.since_last_lose
                     self.longest_streak_gain = self.streak_gain
             else:
+                # update userinfo stats
+                engine._userInfo.profit -= lastGame['wager']
+                # update stats
                 self.games_lost += 1
                 self.total_lost += lastGame['wager']
                 self.balance -= lastGame['wager']
@@ -77,33 +87,36 @@ class Statistics:
         else:
             self.game_skipped += 1
 
-        print(self.duration, self.profit)
+        # print(self.duration, self.profit)
         self.profit_per_hour = self.profit / (self.duration / 3600)
-
-
-    def __str__(self):
-        # print the statistics
-        return f"""
-        Starting balance: {self.starting_balance}
-        Ending balance: {self.balance}
-        Balance all time high: {self.balance_ath}
-        Balance all time low: {self.balance_atl}
-        Games total: {self.games_total}
-        Games played: {self.games_played}
-        Games skipped: {self.game_skipped}
-        Games won: {self.games_won}
-        Games lost: {self.games_lost}
-        Profit: {self.profit}
-        Lowest bet: {self.lowest_bet}
-        Highest bet: {self.highest_bet}
-        Longest win streak: {self.longest_win_streak}
-        Longest streak gain: {self.longest_streak_gain}
-        Longest lose streak: {self.longest_lose_streak}
-        Longest streak cost: {self.longest_streak_cost}
-        Profit per hour: {self.profit_per_hour}
-        Profit all time high: {self.profit_ath}
-        Profit all time low: {self.profit_atl}
-        Total wagered: {self.total_wagered}
-        Total won: {self.total_won}
-        Total lost: {self.total_lost}
-        """
+ 
+    def get_metric(self):
+        # return the optmization metric used for the objective function
+        # it must consider the following: profit, wagered, games played, balance, balance_ath, balance_atl, profit_ath, profit_atl
+        return self.profit
+    
+    def get_statistics(self):
+        return {
+            'starting_balance': self.starting_balance,
+            'balance': self.balance,
+            'balance_ath': self.balance_ath,
+            'balance_atl': self.balance_atl,
+            'games_total': self.games_total,
+            'games_played': self.games_played,
+            'game_skipped': self.game_skipped,
+            'games_won': self.games_won,
+            'games_lost': self.games_lost,
+            'profit': self.profit,
+            'lowest_bet': self.lowest_bet,
+            'highest_bet': self.highest_bet,
+            'longest_win_streak': self.longest_win_streak,
+            'longest_streak_gain': self.longest_streak_gain,
+            'longest_lose_streak': self.longest_lose_streak,
+            'longest_streak_cost': self.longest_streak_cost,
+            'profit_per_hour': self.profit_per_hour,
+            'profit_ath': self.profit_ath,
+            'profit_atl': self.profit_atl,
+            'total_wagered': self.total_wagered,
+            'total_won': self.total_won,
+            'total_lost': self.total_lost
+        }
