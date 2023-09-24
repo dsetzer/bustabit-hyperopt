@@ -9,7 +9,7 @@ class Statistics:
         self.balance_atl = initial_balance
         self.games_total = 0
         self.games_played = 0
-        self.game_skipped = 0
+        self.games_skipped = 0
         self.games_won = 0
         self.games_lost = 0
         self.profit = 0
@@ -85,7 +85,7 @@ class Statistics:
             elif self.profit < self.profit_atl:
                 self.profit_atl = self.profit
         else:
-            self.game_skipped += 1
+            self.games_skipped += 1
 
         # print(self.duration, self.profit)
         self.profit_per_hour = self.profit / (self.duration / 3600)
@@ -103,7 +103,7 @@ class Statistics:
             'balance_atl': self.balance_atl,
             'games_total': self.games_total,
             'games_played': self.games_played,
-            'game_skipped': self.game_skipped,
+            'games_skipped': self.games_skipped,
             'games_won': self.games_won,
             'games_lost': self.games_lost,
             'profit': self.profit,
@@ -120,3 +120,6 @@ class Statistics:
             'total_won': self.total_won,
             'total_lost': self.total_lost
         }
+        
+    def __str__(self):
+        return str(self.get_statistics())

@@ -67,10 +67,12 @@ class Script:
         logging.info(f"Setting parameters: {params}")
         for key, value in params.items():
             if key in self.config_dict:
-                self.config_dict[key]['value'] = value
+                if self.config_dict[key]['type'] == 'balance':
+                    self.config_dict[key]['value'] = int(float(value)) * 100
+                else:
+                    self.config_dict[key]['value'] = value
             else:
                 raise KeyError(f"Parameter {key} not found in config")
-
     def merge_config(self):
         # build a string of the config object definition with each item on a new line and defined as a var object.
         config_code = "var config = {\n"
