@@ -121,5 +121,44 @@ class Statistics:
             'total_lost': self.total_lost
         }
         
+    @staticmethod
+    def average_statistics(statistics_list):
+        avg_stats = {
+            'starting_balance': 0,
+            'balance': 0,
+            'balance_ath': 0,
+            'balance_atl': 0,
+            'games_total': 0,
+            'games_played': 0,
+            'games_skipped': 0,
+            'games_won': 0,
+            'games_lost': 0,
+            'profit': 0,
+            'lowest_bet': 0,
+            'highest_bet': 0,
+            'longest_win_streak': 0,
+            'longest_streak_gain': 0,
+            'longest_lose_streak': 0,
+            'longest_streak_cost': 0,
+            'profit_per_hour': 0,
+            'profit_ath': 0,
+            'profit_atl': 0,
+            'total_wagered': 0,
+            'total_won': 0,
+            'total_lost': 0
+        }
+        
+        num_statistics = len(statistics_list)
+        
+        for stats in statistics_list:
+            for key, value in stats.get_statistics().items():
+                avg_stats[key] += value
+        
+        for key, value in avg_stats.items():
+            avg_stats[key] = value / num_statistics
+            
+        return avg_stats
+
+        
     def __str__(self):
         return str(self.get_statistics())
