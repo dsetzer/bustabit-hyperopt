@@ -91,9 +91,8 @@ class Statistics:
         self.profit_per_hour = self.profit / (self.duration / 3600)
  
     def get_metric(self):
-        # return the optmization metric used for the objective function
-        # it must consider the following: profit, wagered, games played, balance, balance_ath, balance_atl, profit_ath, profit_atl
-        return self.profit
+        metric = self.profit / math.sqrt(self.total_wagered * self.games_played)
+        return -metric  # negative because we want to maximize the metric
     
     def get_statistics(self):
         return {

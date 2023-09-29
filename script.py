@@ -5,6 +5,7 @@ import logging
 
 class Script:
     def __init__(self, file_path):
+        self.js_file_path = file_path
         logging.info(f"Initializing script with file: {file_path}")
         raw_js_code = self.read_js_file(file_path)
         self.config_dict, self.js_code = self.split_config(raw_js_code)
