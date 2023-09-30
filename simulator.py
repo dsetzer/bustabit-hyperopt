@@ -15,10 +15,7 @@ class GameResults:
         self.required_median = required_median
         self.num_sets = num_sets
         self.num_games = num_games
-        self.result_sets = []
-        self.current_indices = [0] * num_sets  # Initialize indices to 0 for each set
-        for _ in range(self.num_sets):
-            self.result_sets.append(self.generate_sim_results())
+        self.result_sets = [self.generate_sim_results() for _ in range(self.num_sets)]
 
     def generate_games(self, hash_value, num_games):
         salt = '0000000000000000004d6ec16dafe9d8370958664c1dc422f452892264c59526'.encode()
@@ -41,14 +38,6 @@ class GameResults:
             if round(median_bust, 2) == self.required_median:
                 return generated_results
 
-    def get_next_game(self, set_index):
-        if self.current_indices[set_index] >= self.num_games:
-            return None  # No more games in this set
-
-        next_game = self.result_sets[set_index][self.current_indices[set_index]]
-        self.current_indices[set_index] += 1  # Increment index for the next call
-        return next_game
-
   
 class Simulator:
     def __init__(self, script: Script):
@@ -56,7 +45,7 @@ class Simulator:
         self.shouldStop = False
         self.shouldStopReason = None
         
-    async def run_single_simulation(self, initial_balance, game_results, set_index):
+    async def run_single_simulation(self, initial_balance, game_set):
         logMessages = []
         userInfo = UserInfo("Player", initial_balance)
         engine = Engine(userInfo)
@@ -64,6 +53,7 @@ class Simulator:
 
         def log(*msgs):
             msg = " ".join(map(str, msgs))
+            # print(f"LOG: {msg}")
             logMessages.append('LOG: ' + msg)
 
         def stop(reason):
@@ -73,12 +63,12 @@ class Simulator:
                 engine.next = None
             print("Script stopped:", reason)
 
-        def SHA256(self, text: str):
+        def SHA256(text: str):
             return hashlib.sha256(text.encode()).hexdigest()
 
-        def gameResultFromHash(self, game_hash: str):
+        def gameResultFromHash(game_hash: str):
             return GameResults.generate_games(game_hash, 1)[0]
-        
+
         with STPyV8.JSContext() as js_context:
             js_context.locals.engine = engine
             js_context.locals.userInfo = userInfo
@@ -86,39 +76,52 @@ class Simulator:
             js_context.locals.log = log
             js_context.locals.SHA256 = SHA256
             js_context.locals.gameResultFromHash = gameResultFromHash
-            
             js_context.locals.config = self.script.config_dict
             try:
                 js_context.eval(self.script.js_code)
+            except ZeroDivisionError as e:
+                import traceback
+                traceback.print_exc()
+                print("ZeroDivisionError occurred:", e)
+                return "SCRIPT_ERROR", None
+            except Exception as e:
+                print(f"Other Exception: {e}")
+                import traceback
+                traceback.print_exc()
+                return "SCRIPT_ERROR", None
             except STPyV8.JSError as e:
-                print(f"Error in script: {e}")
+                raise Exception(f"Error in script: {e}")
                 return None, None
 
-            while len(game_results.result_sets[set_index]) > game_results.current_indices[set_index]:
-                game = game_results.get_next_game(set_index)
-                if game is None:
-                    break
+            for game in game_set:
                 try:
                     await engine._nextGame(game)
                 except Exception as e:
-                    print(f"Error in engine: {e}")
-                    return None, None
-
+                    raise Exception(f"Error in engine: {e}")
+                    return statistics, logMessages
                 statistics.update(engine)
                 if self.shouldStop:
                     break
+            return statistics, logMessages
 
-        return statistics, logMessages
 
     async def run(self, initial_balance, game_results):
         self.shouldStop = False
         self.shouldStopReason = None
-        tasks = [self.run_single_simulation(initial_balance, game_results, i) for i in range(game_results.num_sets)]
+        tasks = [self.run_single_simulation(initial_balance, game_set) for game_set in game_results.result_sets]
         results = await asyncio.gather(*tasks)
         
+        if any(result[0] == "SCRIPT_ERROR" for result in results):
+            raise Exception("Script error detected. Discarding all simulations.")
+            return None
+
         aggregated_statistics = [result[0] for result in results if result[0] is not None]
         all_log_messages = [result[1] for result in results if result[1] is not None]
         
+        if not aggregated_statistics:
+            raise Exception("All simulations returned None or an empty list. No average statistics available.")
+            return None
+
         averaged_statistics = Statistics.average_statistics(aggregated_statistics)
         
         return {

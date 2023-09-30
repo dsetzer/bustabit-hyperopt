@@ -67,7 +67,7 @@ class Engine(STPyV8.JSClass):
         if wager % 100 != 0:
             raise ValueError("The wager must be a multiple of 100.")
         if self._userInfo.balance < wager:
-            raise ValueError("Insufficient balance to place bet.")
+            raise ValueError(f"Insufficient balance (Tried to bet {wager / 100} bits with balance of {self._userInfo.balance / 100} bits)")
         if payout <= 1:
             raise ValueError("Payout must be 1.01x or greater.")
         self._pendingBet = {'wager': wager, 'payout': round(payout * 100) / 100}

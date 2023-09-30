@@ -91,8 +91,11 @@ class Statistics:
         self.profit_per_hour = self.profit / (self.duration / 3600)
  
     def get_metric(self):
+        if self.total_wagered * self.games_played == 0:
+            return 1e12  # Large positive value to signify a bad metric
         metric = self.profit / math.sqrt(self.total_wagered * self.games_played)
         return -metric  # negative because we want to maximize the metric
+
     
     def get_statistics(self):
         return {
@@ -122,39 +125,19 @@ class Statistics:
         
     @staticmethod
     def average_statistics(statistics_list):
-        avg_stats = {
-            'starting_balance': 0,
-            'balance': 0,
-            'balance_ath': 0,
-            'balance_atl': 0,
-            'games_total': 0,
-            'games_played': 0,
-            'games_skipped': 0,
-            'games_won': 0,
-            'games_lost': 0,
-            'profit': 0,
-            'lowest_bet': 0,
-            'highest_bet': 0,
-            'longest_win_streak': 0,
-            'longest_streak_gain': 0,
-            'longest_lose_streak': 0,
-            'longest_streak_cost': 0,
-            'profit_per_hour': 0,
-            'profit_ath': 0,
-            'profit_atl': 0,
-            'total_wagered': 0,
-            'total_won': 0,
-            'total_lost': 0
-        }
+        if not statistics_list:
+            return None
+        
+        avg_stats = Statistics(statistics_list[0].starting_balance)  # Create a new Statistics object
         
         num_statistics = len(statistics_list)
         
         for stats in statistics_list:
-            for key, value in stats.get_statistics().items():
-                avg_stats[key] += value
-        
-        for key, value in avg_stats.items():
-            avg_stats[key] = value / num_statistics
+            for key, value in vars(stats).items():
+                setattr(avg_stats, key, getattr(avg_stats, key) + value)
+                
+        for key, value in vars(avg_stats).items():
+            setattr(avg_stats, key, value / num_statistics)
             
         return avg_stats
 
