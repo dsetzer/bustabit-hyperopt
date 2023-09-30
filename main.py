@@ -11,7 +11,6 @@ from simulator import GameResults, Simulator
 from optimizer import Optimizer
 
 np.int = np.int64 # Fix for a bug in skopt
-logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
 
 def get_default_range(param_type, default_value):
     if param_type == 'multiplier':
@@ -166,6 +165,14 @@ def main():
         initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
         initial_balance = int(float(initial_balance) * 100) if initial_balance else 10000
 
+    # Create the log file
+    logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
+
+    # Load the script
+    script_obj = Script(js_file_path)
+
+
+
     # Generate the game result sets for the simulator
     game_results = GameResults(required_median, num_sets, num_games)
     
@@ -183,11 +190,11 @@ def main():
 
     # Print cmd to run the program in non-interactive mode
     params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'categorical' else f"{param[0]}:{param[2]},{''.join(param[1])}" for param in parameters])
-    print(f"\nTo run the program in non-interactive mode, use the following command:")
+    print(f"\nTo run again in non-interactive mode, use the following command:")
     print(f"python main.py --script {script_obj.js_file_path} --params \"{params_cmd}\" --games {num_games} --balance {initial_balance / 100}")
 
     # Print optimization results
-    logging.info("Optimization complete!")
+    logging.info("\nOptimization complete!")
     logging.info(f"Optimal parameters: {optimization_results['best_parameters']}")
     logging.info(f"Optimal metric: {optimization_results['best_metric']}")
     print(f"\nBest Parameters: {optimization_results['best_parameters']}")
