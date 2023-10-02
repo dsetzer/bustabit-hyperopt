@@ -128,7 +128,7 @@ class Statistics:
         if not statistics_list:
             return None
         
-        avg_stats = Statistics(statistics_list[0].starting_balance)  # Create a new Statistics object
+        avg_stats = Statistics(0)
         
         num_statistics = len(statistics_list)
         
