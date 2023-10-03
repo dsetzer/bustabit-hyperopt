@@ -22,12 +22,12 @@ class GameResults:
         hashobj = hmac.new(salt, binascii.unhexlify(hash_value), hashlib.sha256)
         game_results = []
         for i in range(num_games):
-            intversion = int(hashobj.hexdigest()[0:int(52/4)], 16)
+            intversion = int(hashobj.hexdigest()[:52 // 4], 16)
             number = max(1, math.floor(100 / (1 - (intversion / (2 ** 52)))) / 101)
             game_results.append({'id': i + 1, 'hash': hash_value, 'bust': round(number, 2)})
             hash_value = hashlib.sha256(hash_value.encode()).hexdigest()
             hashobj = hmac.new(salt, binascii.unhexlify(hash_value), hashlib.sha256)
-        return game_results
+        return game_results.reverse()
 
     def generate_sim_results(self):
         while True:
@@ -54,7 +54,7 @@ class Simulator:
         def log(*msgs):
             msg = " ".join(map(str, msgs))
             # print(f"LOG: {msg}")
-            logMessages.append('LOG: ' + msg)
+            logMessages.append(f'LOG: {msg}')
 
         def stop(reason):
             self.shouldStop = True
@@ -76,54 +76,46 @@ class Simulator:
             js_context.locals.log = log
             js_context.locals.SHA256 = SHA256
             js_context.locals.gameResultFromHash = gameResultFromHash
-            js_context.locals.config = self.script.config_dict
-            try:
-                js_context.eval(self.script.js_code)
-            except ZeroDivisionError as e:
-                import traceback
-                traceback.print_exc()
-                print("ZeroDivisionError occurred:", e)
-                return "SCRIPT_ERROR", None
-            except Exception as e:
-                print(f"Other Exception: {e}")
-                import traceback
-                traceback.print_exc()
-                return "SCRIPT_ERROR", None
-            except STPyV8.JSError as e:
-                raise Exception(f"Error in script: {e}")
-                return None, None
+            js_context.locals.config = self.script.config
+            js_context.eval(self.script.js_code)
 
-            for game in game_set:
-                try:
+            try:
+                for game in game_set:
                     await engine._nextGame(game)
-                except Exception as e:
-                    raise Exception(f"Error in engine: {e}")
-                    return statistics, logMessages
-                statistics.update(engine)
-                if self.shouldStop:
-                    break
+                    statistics.update(engine)
+                    if self.shouldStop:
+                        break
+            except ValueError as e:  # Catch the insufficient balance error
+                return "INSUFFICIENT_BALANCE", logMessages  # Return a special flag to indicate failure
+
             return statistics, logMessages
 
 
     async def run(self, initial_balance, game_results):
-        self.shouldStop = False
-        self.shouldStopReason = None
-        tasks = [self.run_single_simulation(initial_balance, game_set) for game_set in game_results.result_sets]
-        results = await asyncio.gather(*tasks)
+        try:
+            self.shouldStop = False
+            self.shouldStopReason = None
+            tasks = [self.run_single_simulation(initial_balance, game_set) for game_set in game_results.result_sets]
+            results = await asyncio.gather(*tasks)
 
-        if any(result[0] == "SCRIPT_ERROR" for result in results):
-            raise Exception("Script error detected. Discarding all simulations.")
-        
-        aggregated_statistics = [result[0] for result in results if result[0] is not None]
-        all_log_messages = [result[1] for result in results if result[1] is not None]
+            if any(result[0] == "SCRIPT_ERROR" for result in results):
+                raise Exception("Script error detected. Discarding all simulations.")
 
-        if not aggregated_statistics:
-            raise Exception("All simulations returned None or an empty list. No average statistics available.")
+            if any(result[0] == "INSUFFICIENT_BALANCE" for result in results):
+                raise Exception("Insufficient balance detected. Discarding all simulations.")
 
-        averaged_statistics = Statistics.average_statistics(aggregated_statistics)
+            aggregated_statistics = [result[0] for result in results if result[0] not in ["SCRIPT_ERROR", "INSUFFICIENT_BALANCE"]]
+            all_log_messages = [result[1] for result in results if result[1] is not None]
 
-        return {
-            "config": self.script.config_dict,
-            "results": averaged_statistics,
-            "output": all_log_messages
-        }
+            if not aggregated_statistics:
+                raise Exception("All simulations returned None or an empty list. No average statistics available.")
+
+            averaged_statistics = Statistics.average_statistics(aggregated_statistics)
+
+            return {
+                "config": self.script.config,
+                "results": averaged_statistics,
+                "output": all_log_messages
+            }
+        except Exception as e:
+            raise e

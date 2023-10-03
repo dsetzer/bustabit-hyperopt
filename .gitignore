@@ -162,3 +162,4 @@ test.py
 testing.py
 scripts/*
 !scripts/example.js
+.vscode/settings.json

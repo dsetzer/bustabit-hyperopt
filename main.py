@@ -3,9 +3,10 @@ import hashlib
 import logging
 import os
 import sys
+import math
 import numpy as np
+import asyncio
 from prettytable import PrettyTable
-from skopt.space import Categorical, Integer, Real, Space
 from script import Script
 from simulator import GameResults, Simulator
 from optimizer import Optimizer
@@ -30,16 +31,16 @@ def get_default_range(param_type, default_value):
     else:
         return None
 
-def select_parameters(config_dict):
+def select_parameters(config):
     parameters = []
     print("Select parameters to optimize:")
     available_params_table = PrettyTable()
     available_params_table.field_names = ["#", "Parameter", "Input Type", "Default Value"]
-    for idx, key in enumerate(config_dict.keys()):
-        default_value = config_dict[key]['value']
-        if config_dict[key]['type'] == 'balance':
+    for idx, key in enumerate(config.keys()):
+        default_value = config[key]['value']
+        if config[key]['type'] == 'balance':
             default_value = default_value / 100
-        available_params_table.add_row([idx + 1, key, config_dict[key]['type'], default_value])
+        available_params_table.add_row([idx + 1, key, config[key]['type'], default_value])
     print(available_params_table)
     def print_selected_parameters():
         selected_params_table = PrettyTable()
@@ -56,17 +57,17 @@ def select_parameters(config_dict):
     while True:
         choice = input("Choose a parameter by its number, enter 'done' to complete the selection, or type 'auto' for automatic setup: ")
         if choice.lower() == 'auto':
-            for idx, key in enumerate(config_dict.keys()):
-                selected_type = config_dict[key]['type']
-                param_range = get_default_range(selected_type, config_dict[key]['value'])
+            for idx, key in enumerate(config.keys()):
+                selected_type = config[key]['type']
+                param_range = get_default_range(selected_type, config[key]['value'])
                 parameters.append((key, param_range[0], param_range[1]))
             print_selected_parameters()
             return parameters
         elif choice.lower() == 'done':
             break
         try:
-            selected_key = list(config_dict.keys())[int(choice) - 1]
-            selected_type = config_dict[selected_key]['type']
+            selected_key = list(config.keys())[int(choice) - 1]
+            selected_type = config[selected_key]['type']
             if selected_type == 'multiplier':
                 min_value = float(input(f"Enter min value for {selected_key}: "))
                 if min_value < 1.01 or min_value > 1e6:
@@ -103,7 +104,7 @@ def select_parameters(config_dict):
                 param_type = 'categorical'
                 parameters.append((selected_key, param_values, param_type))
             elif selected_type == 'radio' or selected_type == 'combobox':
-                options = config_dict[selected_key]['options']
+                options = config[selected_key]['options']
                 options_table = PrettyTable()
                 options_table.field_names = ["#", "Option"]
                 for idx, key in enumerate(options.keys()):
@@ -124,7 +125,7 @@ def select_parameters(config_dict):
             print('Invalid choice. Please try again.')
     return parameters
 
-def main():
+async def main():
     parser = argparse.ArgumentParser(description='Optimize parameters in a JS script.')
     parser.add_argument('--script', help='Path to the JavaScript file.')
     parser.add_argument('--params', help='Parameters to optimize.')
@@ -138,6 +139,7 @@ def main():
     
     if args.script and args.params:
         js_file_path = args.script
+        script_obj = Script(js_file_path)
         num_games = args.games or 1000
         params_list = args.params.split(";")
         parameters = []
@@ -157,7 +159,7 @@ def main():
         js_file_path = input("Enter the path to the JavaScript file: ")
         script_obj = Script(js_file_path)
 
-        parameters = select_parameters(script_obj.config_dict)
+        parameters = select_parameters(script_obj.config)
 
         num_games = input("Enter the simulation size (number of games) [default: 1000]: ")
         num_games = int(num_games) if num_games else 1000
@@ -165,12 +167,9 @@ def main():
         initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
         initial_balance = int(float(initial_balance) * 100) if initial_balance else 10000
 
+
     # Create the log file
     logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
-
-    # Load the script
-    script_obj = Script(js_file_path)
-
 
 
     # Generate the game result sets for the simulator
@@ -178,15 +177,13 @@ def main():
     
     # Build the parameter space for the optimizer
     parameter_names = [param[0] for param in parameters]
-    space = Space([Integer(param[1][0], param[1][1]) if param[2] == 'integer'
-                   else Real(param[1][0], param[1][1]) if param[2] == 'continuous'
-                   else Categorical(param[1]) for param in parameters])
+    space = [(param[0], param[1], param[2]) for param in parameters]
 
     # Create the optimizer and run the optimization
     optimizer = Optimizer(script_obj, initial_balance, game_results, parameter_names, space)
     input("\nThe optimization is ready to start. Press enter to begin...")
     logging.info(f"Starting optimization with {initial_balance / 100} bits for {game_results.num_sets} sets of {game_results.num_games} games each.")
-    optimization_results = optimizer.run_optimization()
+    optimization_results = await optimizer.run_optimization()
 
     # Print cmd to run the program in non-interactive mode
     params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'categorical' else f"{param[0]}:{param[2]},{''.join(param[1])}" for param in parameters])
@@ -206,4 +203,4 @@ def main():
         print("  Metric: ", result['metric'])
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
