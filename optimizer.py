@@ -10,6 +10,8 @@ from copy import deepcopy
 from typing import List, Tuple, Dict
 from operator import itemgetter
 
+logging.basicConfig(level=logging.INFO)
+
 class Optimizer:
     def __init__(self, script: Script, initial_balance: int, game_results, parameter_names: List[str], space):
         self.script = script
@@ -17,11 +19,11 @@ class Optimizer:
         self.game_results = game_results
         self.parameter_names = parameter_names
         self.space = space
-        self.population_size = 20  # Consider a population size of 20 as a starting point
-        self.max_generations = 100  # Maximum number of generations to evolve
-        self.crossover_rate = 0.8  # Crossover rate
-        self.mutation_rate = 0.2   # Mutation rate
-        self.best_individual = None  # Store the best individual found during optimization
+        self.population_size = 20
+        self.max_generations = 100
+        self.crossover_rate = 0.8
+        self.mutation_rate = 0.2
+        self.best_individual = None
 
     def sample_from_space(self, param_name, param_type, param_values):
         if param_type == 'continuous':
@@ -54,9 +56,9 @@ class Optimizer:
                 raise ValueError("Simulation produced invalid results.")
             fitness_value = results["results"].get_metric()
         except Exception as e:
-            print(f"Warning: Failed to evaluate individual {individual} due to exception: {e}. Assigning worst fitness.")
+            logging.warning(f"Failed to evaluate individual {individual} due to exception: {e}. Assigning worst fitness.")
             traceback.print_exc()
-            fitness_value = float('inf')  # Assign worst possible fitness. Use float('-inf') if you're maximizing the metric.
+            fitness_value = float('inf')
         
         return (individual, fitness_value)
     
@@ -65,20 +67,17 @@ class Optimizer:
         return await asyncio.gather(*tasks)
     
     def select_individuals(self, evaluated_population: List[Tuple[Dict, float]]) -> List[Dict]:
-        # Selection based on fitness (higher is better)
         sorted_population = sorted(evaluated_population, key=itemgetter(1), reverse=True)
-        selected_individuals = sorted_population[:self.population_size // 2]  # Selecting the top 50%
+        selected_individuals = sorted_population[:self.population_size // 2]
         return [individual for individual, _ in selected_individuals]
 
     def crossover(self, parent1: Dict, parent2: Dict) -> Dict:
-        # Single-point crossover as an example
         crossover_point = len(self.parameter_names) // 2
         child = deepcopy(parent1)
         child.update({param: parent2[param] for param in self.parameter_names[crossover_point:]})
         return child
 
     def mutate(self, individual: Dict) -> Dict:
-        # Randomly mutating one parameter as an example
         mutation_param = np.random.choice(self.parameter_names)
         param_index = [i for i, (name, _, _) in enumerate(self.space) if name == mutation_param][0]
         individual[mutation_param] = self.sample_from_space(mutation_param, self.space[param_index][2], self.space[param_index][1])
@@ -108,4 +107,3 @@ class Optimizer:
             population = self.generate_new_population(selected_individuals)
         logging.info(f"Optimization complete. Best Parameters: {self.best_individual[0]}, Best Metric: {self.best_individual[1]}")
         return {"best_parameters": self.best_individual[0], "best_metric": self.best_individual[1]}
-

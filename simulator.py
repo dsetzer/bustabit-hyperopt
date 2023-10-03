@@ -27,7 +27,7 @@ class GameResults:
             game_results.append({'id': i + 1, 'hash': hash_value, 'bust': round(number, 2)})
             hash_value = hashlib.sha256(hash_value.encode()).hexdigest()
             hashobj = hmac.new(salt, binascii.unhexlify(hash_value), hashlib.sha256)
-        return game_results.reverse()
+        return game_results[::-1]
 
     def generate_sim_results(self):
         while True:
