@@ -1,109 +1,131 @@
-import numpy as np
-import logging
-import asyncio
 import random
-import math
-import traceback
+import asyncio
+import numpy as np
+from math import exp, log
 from simulator import Simulator
-from script import Script
-from copy import deepcopy
-from typing import List, Tuple, Dict
-from operator import itemgetter
-
-logging.basicConfig(level=logging.INFO)
+from prettytable import PrettyTable
+import logging
 
 class Optimizer:
-    def __init__(self, script: Script, initial_balance: int, game_results, parameter_names: List[str], space):
-        self.script = script
+    def __init__(self, script_obj, initial_balance, game_results, parameter_names, space):
+        self.script_obj = script_obj
         self.initial_balance = initial_balance
         self.game_results = game_results
         self.parameter_names = parameter_names
         self.space = space
         self.population_size = 20
-        self.max_generations = 100
-        self.crossover_rate = 0.8
+        self.num_generations = 30
+        self.elite_size = 4
+        self.tournament_size = 5
         self.mutation_rate = 0.2
-        self.best_individual = None
+        self.simulator = Simulator(self.script_obj)  # Initialize the Simulator object here
 
-    def sample_from_space(self, param_name, param_type, param_values):
+    def sample_from_space(self, param_name):
+        param_details = self.space.get(param_name, {})
+        param_type = param_details.get('type')
+        param_range = param_details.get('range')
+
         if param_type == 'continuous':
-            return random.uniform(param_values[0], param_values[1])
+            return random.uniform(param_range[0], param_range[1])
         elif param_type == 'integer':
-            return random.randint(param_values[0], param_values[1])
+            return random.randint(param_range[0], param_range[1])
         elif param_type == 'categorical':
-            return random.choice(param_values)
-        else:
-            raise ValueError(f"Unknown parameter type {param_type}")
+            return random.choice(param_range)
+        elif param_type == 'payout':
+            u = random.random()
+            min_val, max_val = param_range
+            normalization = 0.99 * log(max_val) - 0.99 * log(min_val)
+            return exp(u * normalization + 0.99 * log(min_val))
 
     def initialize_population(self):
         population = []
         for _ in range(self.population_size):
-            individual = {
-                param_name: self.sample_from_space(
-                    param_name, param_type, param_values
-                )
-                for param_name, param_values, param_type in self.space
-            }
+            individual = {param: self.sample_from_space(param) for param in self.parameter_names}
             population.append(individual)
         return population
 
-    async def evaluate_fitness(self, individual):
-        self.script.set_params(**individual)
-        simulator = Simulator(self.script)
-        try:
-            results = await simulator.run(self.initial_balance, self.game_results)
-            if results["results"] is None:
-                raise ValueError("Simulation produced invalid results.")
-            fitness_value = results["results"].get_metric()
-        except Exception as e:
-            logging.warning(f"Failed to evaluate individual {individual} due to exception: {e}. Assigning worst fitness.")
-            traceback.print_exc()
-            fitness_value = float('inf')
-        
-        return (individual, fitness_value)
-    
-    async def evaluate_population(self, population):
-        tasks = [self.evaluate_fitness(individual) for individual in population]
-        return await asyncio.gather(*tasks)
-    
-    def select_individuals(self, evaluated_population: List[Tuple[Dict, float]]) -> List[Dict]:
-        sorted_population = sorted(evaluated_population, key=itemgetter(1), reverse=True)
-        selected_individuals = sorted_population[:self.population_size // 2]
-        return [individual for individual, _ in selected_individuals]
+    def select_parents_tournament(self, population, fitness):
+        selected_parents = []
+        for _ in range(len(population) - self.elite_size):
+            tournament_individuals = random.sample(list(zip(population, fitness)), self.tournament_size)
+            tournament_winner = max(tournament_individuals, key=lambda x: x[1])[0]
+            selected_parents.append(tournament_winner)
+        return selected_parents
 
-    def crossover(self, parent1: Dict, parent2: Dict) -> Dict:
-        crossover_point = len(self.parameter_names) // 2
-        child = deepcopy(parent1)
-        child.update({param: parent2[param] for param in self.parameter_names[crossover_point:]})
-        return child
+    def crossover(self, parent1, parent2):
+        crossover_point = random.randint(1, len(self.parameter_names) - 1)
+        child1 = {}
+        child2 = {}
+        for idx, param in enumerate(self.parameter_names):
+            if idx < crossover_point:
+                child1[param] = parent1[param]
+                child2[param] = parent2[param]
+            else:
+                child1[param] = parent2[param]
+                child2[param] = parent1[param]
+        return child1, child2
 
-    def mutate(self, individual: Dict) -> Dict:
-        mutation_param = np.random.choice(self.parameter_names)
-        param_index = [i for i, (name, _, _) in enumerate(self.space) if name == mutation_param][0]
-        individual[mutation_param] = self.sample_from_space(mutation_param, self.space[param_index][2], self.space[param_index][1])
+    def mutate(self, individual):
+        for param in self.parameter_names:
+            if random.random() < self.mutation_rate:
+                individual[param] = self.sample_from_space(param)
         return individual
 
-    def generate_new_population(self, selected_individuals: List[Dict]) -> List[Dict]:
-        new_population = deepcopy(selected_individuals)
-        while len(new_population) < self.population_size:
-            if np.random.rand() < self.crossover_rate:
-                parent1, parent2 = np.random.choice(selected_individuals, 2, replace=False)
-                child = self.crossover(parent1, parent2)
-                new_population.append(child)
+    async def evaluate_population(self, population):
+        tasks = [
+            self.simulator.run(self.initial_balance, self.game_results, individual)
+            for individual in population
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        fitness = []
+        for result in results:
+            if isinstance(result, Exception):
+                logging.warning(f"Exception caught during simulation: {result}")
+                fitness.append(float('-inf'))  # Append a low fitness score for failed simulations
             else:
-                individual = np.random.choice(selected_individuals)
-                mutated_individual = self.mutate(individual)
-                new_population.append(mutated_individual)
-        return new_population
+                fitness.append(result['results'].get_metric())
+        return fitness
 
-    async def run_optimization(self) -> Dict:
+    async def run_optimization(self):
         population = self.initialize_population()
-        for generation in range(self.max_generations):
-            evaluated_population = await self.evaluate_population(population)
-            if not self.best_individual or max(evaluated_population, key=itemgetter(1))[1] > self.best_individual[1]:
-                self.best_individual = max(evaluated_population, key=itemgetter(1))
-            logging.info(f"Generation {generation}, Best Evaluation Metric: {self.best_individual[1]}")
-            selected_individuals = self.select_individuals(evaluated_population)
-            population = self.generate_new_population(selected_individuals)
-        logging.info(f"Optimization complete. Best Parameters: {self.best_individual[0]}, Best Metric: {self.best_individual[1]}")
-        return {"best_parameters": self.best_individual[0], "best_metric": self.best_individual[1]}
+        top_10_results = []
+
+        for _ in range(self.num_generations):
+            fitness = await self.evaluate_population(population)
+            combined = list(zip(population, fitness))
+
+            # Update top 10 results
+            top_10_results.extend(combined)
+            top_10_results = sorted(top_10_results, key=lambda x: x[1], reverse=True)[:10]
+
+            # Elite selection
+            elite_individuals = sorted(combined, key=lambda x: x[1], reverse=True)[:self.elite_size]
+            elite_individuals = [individual for individual, _ in elite_individuals]
+
+            # Tournament selection for parents
+            parents = self.select_parents_tournament(population, fitness)
+
+            # Crossover and mutation to produce children
+            children = []
+            while len(children) < len(population) - self.elite_size:
+                parent1 = random.choice(parents)
+                parent2 = random.choice(parents)
+                child1, child2 = self.crossover(parent1, parent2)
+                child1 = self.mutate(child1)
+                child2 = self.mutate(child2)
+                children.extend((child1, child2))
+
+            # Next generation becomes the elite and children
+            population = elite_individuals + children[:len(population) - self.elite_size]
+
+        # Final evaluation to update the fitness values
+        fitness = await self.evaluate_population(population)
+        best_individual = max(list(zip(population, fitness)), key=lambda x: x[1])
+
+        return {
+            "best_parameters": best_individual[0],
+            "best_metric": best_individual[1],
+            "top_10_results": [{"rank": i + 1, "parameters": res[0], "metric": res[1]} for i, res in enumerate(top_10_results)]
+        }
+

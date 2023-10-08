@@ -15,7 +15,7 @@ np.int = np.int64 # Fix for a bug in skopt
 
 def get_default_range(param_type, default_value):
     if param_type == 'multiplier':
-        return (1.01, 1e6), 'continuous'
+        return (1.01, 1e6), 'payout'
     elif param_type == 'balance':
         default_value = default_value / 100
         return (1, 10000), 'integer'
@@ -42,6 +42,7 @@ def select_parameters(config):
             default_value = default_value / 100
         available_params_table.add_row([idx + 1, key, config[key]['type'], default_value])
     print(available_params_table)
+
     def print_selected_parameters():
         selected_params_table = PrettyTable()
         selected_params_table.field_names = ["Parameter", "Value Range", "Type"]
@@ -77,7 +78,7 @@ def select_parameters(config):
                 if max_value < 1.01 or max_value > 1e6:
                     print("Invalid max value. Please try again.")
                     continue
-                param_type = 'continuous'
+                param_type = 'payout'
                 parameters.append((selected_key, (min_value, max_value), param_type))
             elif selected_type == 'balance':
                 min_value = int(float(input(f"Enter min value for {selected_key}: ")))
@@ -103,7 +104,7 @@ def select_parameters(config):
                 param_values = [True, False]
                 param_type = 'categorical'
                 parameters.append((selected_key, param_values, param_type))
-            elif selected_type == 'radio' or selected_type == 'combobox':
+            elif selected_type in ['radio', 'combobox']:
                 options = config[selected_key]['options']
                 options_table = PrettyTable()
                 options_table.field_names = ["#", "Option"]
@@ -165,7 +166,7 @@ async def main():
         num_games = int(num_games) if num_games else 1000
 
         initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
-        initial_balance = int(float(initial_balance) * 100) if initial_balance else 10000
+        initial_balance = int(float(initial_balance) * 100) if initial_balance else 1000000
 
 
     # Create the log file
@@ -177,7 +178,7 @@ async def main():
     
     # Build the parameter space for the optimizer
     parameter_names = [param[0] for param in parameters]
-    space = [(param[0], param[1], param[2]) for param in parameters]
+    space = {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}
 
     # Create the optimizer and run the optimization
     optimizer = Optimizer(script_obj, initial_balance, game_results, parameter_names, space)
@@ -187,20 +188,18 @@ async def main():
 
     # Print cmd to run the program in non-interactive mode
     params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'categorical' else f"{param[0]}:{param[2]},{''.join(param[1])}" for param in parameters])
-    print(f"\nTo run again in non-interactive mode, use the following command:")
-    print(f"python main.py --script {script_obj.js_file_path} --params \"{params_cmd}\" --games {num_games} --balance {initial_balance / 100}")
+    logging.info(f"\nTo run again in non-interactive mode, use the following command:")
+    logging.info(f"python main.py --script {script_obj.js_file_path} --params \"{params_cmd}\" --games {num_games} --balance {initial_balance / 100}")
 
-    # Print optimization results
+  # Logging the optimization results
     logging.info("\nOptimization complete!")
-    logging.info(f"Optimal parameters: {optimization_results['best_parameters']}")
-    logging.info(f"Optimal metric: {optimization_results['best_metric']}")
-    print(f"\nBest Parameters: {optimization_results['best_parameters']}")
-    print(f"Best Metric: {optimization_results['best_metric']}")
-    print("\nTop 10 Optimization Results:")
+    logging.info(f"Best Parameters: {optimization_results['best_parameters']}")
+    logging.info(f"Best Metric: {optimization_results['best_metric']}")
+    logging.info("\nTop 10 Optimization Results:")
     for result in optimization_results['top_10_results']:
-        print(f"Rank {result['rank']}")
-        print("  Parameters: ", result['parameters'])
-        print("  Metric: ", result['metric'])
+        logging.info(f"Rank {result['rank']}")
+        logging.info(f"  Parameters: {result['parameters']}")
+        logging.info(f"  Metric: {result['metric']}")
 
 if __name__ == "__main__":
     asyncio.run(main())

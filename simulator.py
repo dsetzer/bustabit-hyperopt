@@ -45,15 +45,14 @@ class Simulator:
         self.shouldStop = False
         self.shouldStopReason = None
         
-    async def run_single_simulation(self, initial_balance, game_set):
+    async def run_single_simulation(self, initial_balance, game_set, script_params):
         logMessages = []
         userInfo = UserInfo("Player", initial_balance)
         engine = Engine(userInfo)
         statistics = Statistics(initial_balance)
-
+        
         def log(*msgs):
             msg = " ".join(map(str, msgs))
-            # print(f"LOG: {msg}")
             logMessages.append(f'LOG: {msg}')
 
         def stop(reason):
@@ -76,7 +75,7 @@ class Simulator:
             js_context.locals.log = log
             js_context.locals.SHA256 = SHA256
             js_context.locals.gameResultFromHash = gameResultFromHash
-            js_context.locals.config = self.script.config
+            js_context.locals.config = self.script.get_config(script_params)
             js_context.eval(self.script.js_code)
 
             try:
@@ -91,11 +90,12 @@ class Simulator:
             return statistics, logMessages
 
 
-    async def run(self, initial_balance, game_results):
+    async def run(self, initial_balance, game_results, script_params):
         try:
             self.shouldStop = False
             self.shouldStopReason = None
-            tasks = [self.run_single_simulation(initial_balance, game_set) for game_set in game_results.result_sets]
+
+            tasks = [self.run_single_simulation(initial_balance, game_set, script_params) for game_set in game_results.result_sets]
             results = await asyncio.gather(*tasks)
 
             if any(result[0] == "SCRIPT_ERROR" for result in results):

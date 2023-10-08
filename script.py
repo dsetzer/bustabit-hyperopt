@@ -2,6 +2,7 @@
 import STPyV8 as V8
 import json
 import logging
+from copy import deepcopy
 
 class Script:
     def __init__(self, file_path):
@@ -65,16 +66,18 @@ class Script:
 
         return config, remaining_code
 
-    def set_params(self, **params):
-        logging.info(f"Setting parameters: {params}")
-        for key, value in params.items():
-            if key not in self.config:
+    def get_config(self, new_values):
+        logging.info(f"Setting parameters: {new_values}")
+        updated_config = deepcopy(self.config)
+        for key, value in new_values.items():
+            if key not in updated_config:
                 raise KeyError(f"Parameter {key} not found in config")
-            if self.config[key]['type'] == 'balance':
-                self.config[key]['value'] = int(float(value)) * 100
+            if updated_config[key]['type'] == 'balance':
+                updated_config[key]['value'] = int(float(value)) * 100
             else:
-                self.config[key]['value'] = value
+                updated_config[key]['value'] = value
                 logging.info(f"Setting {key} to {value}")
+        return updated_config
 
     def merge_config(self):
         # build a string of the config object definition with each item on a new line and defined as a var object.
