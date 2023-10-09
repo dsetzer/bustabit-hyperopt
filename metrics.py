@@ -94,7 +94,7 @@ class Statistics:
         if self.total_wagered * self.games_played == 0:
             return 1e12  # Large positive value to signify a bad metric
         metric = self.profit / math.sqrt(self.total_wagered * self.games_played)
-        return -metric  # negative because we want to maximize the metric
+        return metric
 
     
     def get_statistics(self):

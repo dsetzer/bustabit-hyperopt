@@ -13,11 +13,12 @@ class Optimizer:
         self.game_results = game_results
         self.parameter_names = parameter_names
         self.space = space
-        self.population_size = 20
-        self.num_generations = 30
-        self.elite_size = 4
+        self.population_size = 10
+        self.num_generations = 100
+        self.elite_size = 2
         self.tournament_size = 5
         self.mutation_rate = 0.2
+        self.crossover_rate = 0.8
         self.simulator = Simulator(self.script_obj)  # Initialize the Simulator object here
 
     def sample_from_space(self, param_name):
@@ -53,6 +54,9 @@ class Optimizer:
         return selected_parents
 
     def crossover(self, parent1, parent2):
+        if random.random() >= self.crossover_rate:
+            return parent1, parent2
+        
         crossover_point = random.randint(1, len(self.parameter_names) - 1)
         child1 = {}
         child2 = {}
@@ -63,6 +67,7 @@ class Optimizer:
             else:
                 child1[param] = parent2[param]
                 child2[param] = parent1[param]
+                
         return child1, child2
 
     def mutate(self, individual):
@@ -128,4 +133,3 @@ class Optimizer:
             "best_metric": best_individual[1],
             "top_10_results": [{"rank": i + 1, "parameters": res[0], "metric": res[1]} for i, res in enumerate(top_10_results)]
         }
-

@@ -10,6 +10,7 @@ from prettytable import PrettyTable
 from script import Script
 from simulator import GameResults, Simulator
 from optimizer import Optimizer
+import gc
 
 np.int = np.int64 # Fix for a bug in skopt
 
@@ -200,6 +201,8 @@ async def main():
         logging.info(f"Rank {result['rank']}")
         logging.info(f"  Parameters: {result['parameters']}")
         logging.info(f"  Metric: {result['metric']}")
+
+    gc.collect()
 
 if __name__ == "__main__":
     asyncio.run(main())
