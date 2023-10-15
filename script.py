@@ -32,6 +32,7 @@ class Script:
         items = [f'{k}: {self.dict_to_object(v)}' if isinstance(v, dict) else f'{k}: {json.dumps(v)}' for k, v in py_dict.items()]
         return "{ " + ", ".join(items) + " }"
 
+
     def split_config(self, raw_js_code):
         start_index = raw_js_code.find('var config = {')
         if start_index == -1:
@@ -66,8 +67,9 @@ class Script:
 
         return config, remaining_code
 
+
     def get_config(self, new_values):
-        logging.info(f"Setting parameters: {new_values}")
+        # logging.debug(f"Setting parameters: {new_values}")
         updated_config = deepcopy(self.config)
         for key, value in new_values.items():
             if key not in updated_config:
@@ -76,7 +78,7 @@ class Script:
                 updated_config[key]['value'] = int(float(value)) * 100
             else:
                 updated_config[key]['value'] = value
-                logging.info(f"Setting {key} to {value}")
+                # logging.info(f"Setting {key} to {value}")
         return updated_config
 
     def merge_config(self):

@@ -37,28 +37,22 @@ class GameResults:
             median_bust = median(busts)
             if round(median_bust, 2) == self.required_median:
                 return generated_results
-
   
 class Simulator:
     def __init__(self, script: Script):
         self.script = script
         self.shouldStop = False
         self.shouldStopReason = None
-        
+
     async def run_single_simulation(self, initial_balance, game_set, script_params):
-        logMessages = []
         userInfo = UserInfo("Player", initial_balance)
         engine = Engine(userInfo)
         statistics = Statistics(initial_balance)
-        
-        def log(*msgs):
-            msg = " ".join(map(str, msgs))
-            logMessages.append(f'LOG: {msg}')
 
         def stop(reason):
             self.shouldStop = True
             engine.stopping = True
-            if engine.next != None:
+            if engine.next is not None:
                 engine.next = None
             print("Script stopped:", reason)
 
@@ -72,7 +66,7 @@ class Simulator:
             js_context.locals.engine = engine
             js_context.locals.userInfo = userInfo
             js_context.locals.stop = stop
-            js_context.locals.log = log
+            js_context.locals.log = lambda *msgs: None  # Discard log messages
             js_context.locals.SHA256 = SHA256
             js_context.locals.gameResultFromHash = gameResultFromHash
             js_context.locals.config = self.script.get_config(script_params)
@@ -85,10 +79,9 @@ class Simulator:
                     if self.shouldStop:
                         break
             except ValueError as e:  # Catch the insufficient balance error
-                return "INSUFFICIENT_BALANCE", logMessages  # Return a special flag to indicate failure
+                return "INSUFFICIENT_BALANCE", None  # Return a special flag to indicate failure
 
-            return statistics, logMessages
-
+            return statistics, None
 
     async def run(self, initial_balance, game_results, script_params):
         try:
@@ -105,7 +98,6 @@ class Simulator:
                 raise Exception("Insufficient balance detected. Discarding all simulations.")
 
             aggregated_statistics = [result[0] for result in results if result[0] not in ["SCRIPT_ERROR", "INSUFFICIENT_BALANCE"]]
-            all_log_messages = [result[1] for result in results if result[1] is not None]
 
             if not aggregated_statistics:
                 raise Exception("All simulations returned None or an empty list. No average statistics available.")
@@ -115,7 +107,7 @@ class Simulator:
             return {
                 "config": self.script.config,
                 "results": averaged_statistics,
-                "output": all_log_messages
+                "output": None
             }
         except Exception as e:
             raise e

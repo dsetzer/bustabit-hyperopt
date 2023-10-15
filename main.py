@@ -10,8 +10,11 @@ from prettytable import PrettyTable
 from script import Script
 from simulator import GameResults, Simulator
 from optimizer import Optimizer
+import objgraph
 import gc
+import tracemalloc
 
+tracemalloc.start()
 np.int = np.int64 # Fix for a bug in skopt
 
 def get_default_range(param_type, default_value):
@@ -192,16 +195,24 @@ async def main():
     logging.info(f"\nTo run again in non-interactive mode, use the following command:")
     logging.info(f"python main.py --script {script_obj.js_file_path} --params \"{params_cmd}\" --games {num_games} --balance {initial_balance / 100}")
 
-  # Logging the optimization results
+    # Logging the optimization results
     logging.info("\nOptimization complete!")
     logging.info(f"Best Parameters: {optimization_results['best_parameters']}")
     logging.info(f"Best Metric: {optimization_results['best_metric']}")
-    logging.info("\nTop 10 Optimization Results:")
-    for result in optimization_results['top_10_results']:
-        logging.info(f"Rank {result['rank']}")
+    logging.info("\nTop 5 Optimization Results:")
+    for rank, result in optimization_results['top_5_results']:
+        logging.info(f"Rank {rank + 1}")
         logging.info(f"  Parameters: {result['parameters']}")
         logging.info(f"  Metric: {result['metric']}")
 
+    objgraph.show_most_common_types()
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics('lineno')
+    print("\nn[ Top 10 ]")
+    for stat in top_stats[:10]:
+        print(stat)
+        
+    tracemalloc.stop()
     gc.collect()
 
 if __name__ == "__main__":

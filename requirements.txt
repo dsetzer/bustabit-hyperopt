@@ -1,0 +1,4 @@
+numpy==1.24.4
+prettytable==3.9.0
+scikit_optimize==0.9.0
+stpyv8==11.6.189.19
