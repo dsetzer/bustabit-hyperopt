@@ -79,7 +79,7 @@ class Simulator:
                     if self.shouldStop:
                         break
             except ValueError as e:  # Catch the insufficient balance error
-                return "INSUFFICIENT_BALANCE", None  # Return a special flag to indicate failure
+                return Statistics(0), None  # Return a Statistics object with a very low balance to indicate failure
 
             return statistics, None
 
@@ -97,17 +97,13 @@ class Simulator:
             if any(result[0] == "INSUFFICIENT_BALANCE" for result in results):
                 raise Exception("Insufficient balance detected. Discarding all simulations.")
 
-            aggregated_statistics = [result[0] for result in results if result[0] not in ["SCRIPT_ERROR", "INSUFFICIENT_BALANCE"]]
+            aggregated_statistics = [result[0] for result in results if result[0].balance != 0]
 
             if not aggregated_statistics:
                 raise Exception("All simulations returned None or an empty list. No average statistics available.")
 
             averaged_statistics = Statistics.average_statistics(aggregated_statistics)
 
-            return {
-                "config": self.script.config,
-                "results": averaged_statistics,
-                "output": None
-            }
+            return averaged_statistics, None
         except Exception as e:
             raise e

@@ -7,7 +7,8 @@ import asyncio
 from prettytable import PrettyTable
 from script import Script
 from simulator import GameResults
-from optimizer import Optimizer
+#from optimizer import Optimizer
+from ps_optimizer import PSOptimizer as Optimizer
 import gc
 import tracemalloc
 
@@ -185,7 +186,7 @@ async def main():
     optimizer = Optimizer(script_obj, initial_balance, game_results, parameter_names, space)
     input("\nThe optimization is ready to start. Press enter to begin...")
     logging.info(f"Starting optimization with {initial_balance / 100} bits for {game_results.num_sets} sets of {game_results.num_games} games each.")
-    optimization_results = await optimizer.run_optimization()
+    optimization_results = await optimizer.optimize()
 
     # Print cmd to run the program in non-interactive mode
     params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'categorical' else f"{param[0]}:{param[2]},{''.join(param[1])}" for param in parameters])
