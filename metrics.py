@@ -91,12 +91,11 @@ class Statistics:
         self.profit_per_hour = self.profit / (self.duration / 3600)
  
     def get_metric(self):
-        if self.total_wagered * self.games_played == 0:
-            return 1e12  # Large positive value to signify a bad metric
+        if self.total_wagered == 0 or self.games_played == 0:
+            return float('inf')
         metric = self.profit / math.sqrt(self.total_wagered * self.games_played)
         return metric
-
-    
+            
     def get_statistics(self):
         return {
             'starting_balance': self.starting_balance,

@@ -62,7 +62,7 @@ class Optimizer:
                 replace=False
             )
             tournament_fitness = fitness[tournament_individuals]
-            tournament_winner = population[tournament_individuals[np.argmax(tournament_fitness)]]
+            tournament_winner = population[tournament_individuals[np.argmin(tournament_fitness)]]
             selected_parents.append(tournament_winner)
         return selected_parents
 
@@ -99,7 +99,7 @@ class Optimizer:
             params_tuple = tuple(individual.items())
 
             if params_tuple in self.evaluated_params:
-                fitness[i] = self.evaluated_params[params_tuple]
+                fitness[i] = -self.evaluated_params[params_tuple]  # Negating the fitness value
                 logging.debug(f"Individual {i} already evaluated. Fitness: {fitness[i]}")
             else:
                 tasks.append((i, self.simulator.run(self.initial_balance, self.game_results, individual)))
@@ -110,10 +110,10 @@ class Optimizer:
         for (i, _), result in zip(tasks, results):
             if isinstance(result, Exception):
                 logging.error(f"Error evaluating individual {i}: {result}")
-                fitness[i] = float('-inf')
+                fitness[i] = float('inf')  # Setting the fitness to infinity
             else:
                 fit = result['results'].get_metric()
-                fitness[i] = fit
+                fitness[i] = -fit  # Negating the fitness value
                 self.evaluated_params[tuple(population[i].items())] = fit
 
         return fitness
@@ -130,26 +130,26 @@ class Optimizer:
             fitness = await self.evaluate_population(population)
 
             # Debugging to ensure that the best fitness is improving over generations
-            logging.debug(f"Generation {generation}: Best Fitness: {max(fitness)}")
+            logging.debug(f"Generation {generation}: Best Fitness: {-min(fitness)}")
 
             # Update top 5 results
             for individual, fit in zip(population, fitness):
-                if fit != float('-inf'):  # Check if the fitness is not -inf
+                if fit != float('inf'):  # Check if the fitness is not infinity
                     individual_tuple = tuple(individual.items())
                     
                     if individual_tuple not in unique_individuals:
                         unique_individuals.add(individual_tuple)
 
                         if len(top_5_results) < 5:
-                            heapq.heappush(top_5_results, (-fit, individual))  # Storing negative of fitness
-                        elif fit > -top_5_results[0][0]:  # Getting the actual fitness value by negating
-                            heapq.heappushpop(top_5_results, (-fit, individual))  # Storing negative of fitness
+                            heapq.heappush(top_5_results, (fit, individual))  # Storing the fitness value
+                        elif fit < top_5_results[0][0]:  # Getting the actual fitness value
+                            heapq.heappushpop(top_5_results, (fit, individual))
 
                         # Store the individual's parameters in the dictionary using fitness as the key
                         results_dict[fit] = individual
 
             # Elite selection
-            elite_indices = np.argsort(fitness)[-self.elite_size:]
+            elite_indices = np.argsort(fitness)[:self.elite_size]  # Sorting in ascending order
             elite_individuals = population[elite_indices]
 
             # Tournament selection for parents
@@ -170,15 +170,15 @@ class Optimizer:
 
         # Final evaluation to update the fitness values
         fitness = await self.evaluate_population(population)
-        best_individual_index = np.argmax(fitness)
+        best_individual_index = np.argmin(fitness)  # Getting the index of the individual with the lowest fitness value
         best_individual = population[best_individual_index]
 
-        # Sort the top 5 results in descending order
-        top_5_results = sorted(top_5_results, key=lambda x: x[0], reverse=True)
-        top_5_parameters = [(rank, {'parameters': individual, 'metric': fit}) for rank, (fit, individual) in enumerate(top_5_results)]
+        # Sort the top 5 results in ascending order
+        top_5_results = sorted(top_5_results, key=lambda x: x[0])
+        top_5_parameters = [(rank, {'parameters': individual, 'metric': -fit}) for rank, (fit, individual) in enumerate(top_5_results)]
 
         return {
             "best_parameters": {param: best_individual[param] for param in self.parameter_names},
-            "best_metric": fitness[best_individual_index],
+            "best_metric": -fitness[best_individual_index],  # Negating the fitness value
             "top_5_results": top_5_parameters
         }
