@@ -17,14 +17,14 @@ class Optimizer:
         self.space = space
         self.evaluated_params = {}  
         
-        self.population_size = 50  # Increased for more diversity
-        self.num_generations = 100  # Increased to allow more refinement over time
+        self.population_size = 10  # Increased for more diversity
+        self.num_generations = 30  # Increased to allow more refinement over time
         self.elite_size = 5  # Increased to retain more top performers
         self.tournament_size = 5  # Kept the same, adjust based on performance
-        self.max_mutation_rate = 0.5  # Decreased to preserve good solutions
+        self.max_mutation_rate = 0.9  # Decreased to preserve good solutions
         self.min_mutation_rate = 0.1  # Set a floor to maintain some level of diversity
         self.max_crossover_rate = 0.9  # Kept the same to encourage recombination
-        self.min_crossover_rate = 0.6  # Increased floor to ensure enough recombination
+        self.min_crossover_rate = 0.1  # Increased floor to ensure enough recombination
         
         self.simulator = Simulator(self.script_obj)  
 
@@ -117,8 +117,6 @@ class Optimizer:
                 self.evaluated_params[tuple(population[i].items())] = fit
 
         return fitness
-
-    @profile
     async def run_optimization(self):
         population = self.initialize_population()
         results_dict = {}   

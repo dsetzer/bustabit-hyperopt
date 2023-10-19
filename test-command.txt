@@ -1,0 +1,1 @@
+python main.py --script scripts/example.js --params "baseBet:integer,1,100;payout:payout,1.01,10;waitNum:integer,1,10" --balance 100000 --games 500

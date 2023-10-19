@@ -1,16 +1,13 @@
 import argparse
 import hashlib
 import logging
-import os
-import sys
 import math
 import numpy as np
 import asyncio
 from prettytable import PrettyTable
 from script import Script
-from simulator import GameResults, Simulator
+from simulator import GameResults
 from optimizer import Optimizer
-import objgraph
 import gc
 import tracemalloc
 
@@ -205,7 +202,6 @@ async def main():
         logging.info(f"  Parameters: {result['parameters']}")
         logging.info(f"  Metric: {result['metric']}")
 
-    objgraph.show_most_common_types()
     snapshot = tracemalloc.take_snapshot()
     top_stats = snapshot.statistics('lineno')
     print("\nn[ Top 10 ]")
