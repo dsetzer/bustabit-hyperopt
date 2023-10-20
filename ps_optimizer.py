@@ -1,7 +1,27 @@
 import numpy as np
-import asyncio
 from simulator import Simulator
 from math import exp, log
+import random
+
+def decode_value(encoded_value, param_details):
+    param_type = param_details.get('type')
+    param_range = param_details.get('range')
+    
+    if param_type == 'continuous':
+        return param_range[0] + (param_range[1] - param_range[0]) * (encoded_value / 100.0)
+    
+    if param_type == 'integer':
+        return int(param_range[0] + round((param_range[1] - param_range[0]) * (encoded_value / 100.0)))
+    
+    if param_type == 'categorical':
+        index = int(round((len(param_range) - 1) * (encoded_value / 100.0)))
+        return param_range[index]
+    
+    if param_type == 'payout':
+        return round(param_range[0] + (param_range[1] - param_range[0]) * (encoded_value / 100.0), 2)
+    
+    if param_type == 'checkbox':
+        return bool(round(encoded_value / 100.0))
 
 class PSOptimizer:
     def __init__(self, script_obj, initial_balance, game_results, parameter_names, space):
@@ -21,10 +41,8 @@ class PSOptimizer:
         
         self.initialize_particles()
         
-        self.pbest_position = np.copy(self.particles)
-        self.pbest_value = np.full((self.num_particles,), float('inf'))
         self.gbest_value = float('inf')
-        self.gbest_position = None
+        self.gbest_position = {key: self.sample_from_space(key) for key in self.parameter_names}
 
     def sample_from_space(self, param_name):
         param_details = self.space.get(param_name, {})
@@ -44,15 +62,34 @@ class PSOptimizer:
             return exp(u * normalization + 0.99 * log(min_val))
 
     def initialize_particles(self):
-        self.particles = np.array([
-            {param: self.sample_from_space(param) for param in self.parameter_names}
-            for _ in range(self.num_particles)
-        ])
+        self.particles = []
+        self.velocities = []
+        self.pbest_position = []
+        self.pbest_value = []
+        
+        for _ in range(self.num_particles):
+            # Initialize particle with encoded values
+            particle = {}
+            for param_name in self.parameter_names:
+                encoded_value = random.uniform(0, 100)
+                particle[param_name] = encoded_value
+            self.particles.append(particle)
+            
+            # Initialize velocity
+            velocity = {}
+            for key in particle.keys():
+                velocity[key] = random.uniform(-1, 1)
+            self.velocities.append(velocity)
+
+            # Initialize personal best
+            self.pbest_position.append(particle.copy())
+            self.pbest_value.append(float('inf'))
 
     async def evaluate_fitness(self, particle):
-        sim_result = await self.simulator.run(self.initial_balance, self.game_results, particle)
+        decoded_particle = {k: decode_value(v, self.space[k]) for k, v in particle.items()}
+        sim_result = await self.simulator.run(self.initial_balance, self.game_results, decoded_particle)
         fitness = sim_result[0].get_metric()
-        print(f"Particle: {particle}, Fitness: {fitness}")
+        print(f"Particle: {decoded_particle}, Fitness: {fitness}")
         return fitness
 
     def enforce_constraints(self, particle):
@@ -80,36 +117,39 @@ class PSOptimizer:
                 particle[param] = round(value)
         
         return particle
-    
+
     async def update_particles(self):
         for i in range(self.num_particles):
-            # Evaluate the fitness of each particle
+            # Update velocity
+            inertia = {key: self.w * self.velocities[i][key] for key in self.particles[i].keys()}
+            cognitive = {key: self.c1 * random.random() * (self.pbest_position[i][key] - self.particles[i][key]) for key in self.particles[i].keys()}
+            if self.gbest_position is not None:
+                social = {key: self.c2 * random.random() * (self.gbest_position[key] - self.particles[i][key]) for key in self.particles[i].keys()}
+            else:
+                social = {key: 0 for key in self.particles[i].keys()}
+            self.velocities[i] = {key: inertia[key] + cognitive[key] + social[key] for key in self.particles[i].keys()}
+
+            # Update position and enforce constraints
+            for key in self.particles[i].keys():
+                self.particles[i][key] += self.velocities[i][key]
+                self.particles[i] = self.enforce_constraints(self.particles[i])
+
+            # Evaluate fitness
             fitness = await self.evaluate_fitness(self.particles[i])
-            
-            # Update the personal best for this particle
+
+            # Update personal and global bests
             if fitness < self.pbest_value[i]:
+                self.pbest_position[i] = self.particles[i].copy()
                 self.pbest_value[i] = fitness
-                self.pbest_position[i] = self.particles[i]
-            
-            # Update the global best
-            if fitness < self.gbest_value:
+
+            if self.gbest_position is None or fitness < self.gbest_value:
+                self.gbest_position = self.particles[i].copy()
                 self.gbest_value = fitness
-                self.gbest_position = self.particles[i]
-            
-            # Enforce the constraints for each particle
-            self.particles[i] = self.enforce_constraints(self.particles[i])
                 
     async def optimize(self):
         for iter_num in range(self.max_iter):
             print(f"Iteration {iter_num + 1}")
             await self.update_particles()
-
-            # Update velocity and position
-            for i in range(self.num_particles):
-                new_velocity = (self.w * np.random.random()) + \
-                               (self.c1 * np.random.random() * (np.array(list(self.pbest_position[i].values())) - np.array(list(self.particles[i].values())))) + \
-                               (self.c2 * np.random.random() * (np.array(list(self.gbest_position.values())) - np.array(list(self.particles[i].values()))))
-                
-                self.particles[i] = {self.parameter_names[j]: new_velocity[j] for j in range(len(self.parameter_names))}
+        
         print(f"Optimization complete. Best position: {self.gbest_position}, Best value: {self.gbest_value}")
         return self.gbest_position, self.gbest_value
