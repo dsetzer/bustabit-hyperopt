@@ -17,19 +17,19 @@ np.int = np.int64 # Fix for a bug in skopt
 
 def get_default_range(param_type, default_value):
     if param_type == 'multiplier':
-        return (1.01, 1e6), 'payout'
+        return (1.01, 1e6), 'multiplier'
     elif param_type == 'balance':
         default_value = default_value / 100
-        return (1, 10000), 'integer'
+        return (1, 10000), 'balance'
     elif param_type == 'number':
         if isinstance(default_value, int):
-            return (math.floor(default_value * 0.5), math.ceil(default_value * 1.5)), 'integer'
+            return (math.floor(default_value * 0.5), math.ceil(default_value * 1.5)), 'number'
         else:
-            return (default_value * 0.5, default_value * 1.5), 'continuous'
+            return (default_value * 0.5, default_value * 1.5), 'number'
     elif param_type == 'checkbox':
-        return [True, False], 'categorical'
+        return [True, False], 'checkbox'
     elif param_type in ['radio', 'combobox']:
-        return list(default_value.keys()), 'categorical'
+        return list(default_value.keys()), 'radio'
     else:
         return None
 
@@ -49,7 +49,7 @@ def select_parameters(config):
         selected_params_table = PrettyTable()
         selected_params_table.field_names = ["Parameter", "Value Range", "Type"]
         for param in parameters:
-            if param[2] == 'categorical':
+            if param[2] == 'checkbox':
                 value_range = ', '.join(map(str, param[1]))
             else:
                 value_range = f"{param[1][0]} to {param[1][1]}"
@@ -80,7 +80,7 @@ def select_parameters(config):
                 if max_value < 1.01 or max_value > 1e6:
                     print("Invalid max value. Please try again.")
                     continue
-                param_type = 'payout'
+                param_type = 'multiplier'
                 parameters.append((selected_key, (min_value, max_value), param_type))
             elif selected_type == 'balance':
                 min_value = int(float(input(f"Enter min value for {selected_key}: ")))
@@ -91,20 +91,20 @@ def select_parameters(config):
                 if max_value < 1:
                     print("Invalid max value. Please try again.")
                     continue
-                param_type = 'integer'
+                param_type = 'balance'
                 parameters.append((selected_key, (min_value, max_value), param_type))
             elif selected_type == 'number':
                 min_value = float(input(f"Enter min value for {selected_key}: "))
                 max_value = float(input(f"Enter max value for {selected_key}: "))
                 if min_value.is_integer() and max_value.is_integer():
                     response = input("Whole numbers only? (yes/no): ")
-                    param_type = 'integer' if response.lower() == 'yes' else 'continuous'
+                    param_type = 'number' if response.lower() == 'yes' else 'continuous'
                 else:
-                    param_type = 'continuous'
+                    param_type = 'number'
                 parameters.append((selected_key, (min_value, max_value), param_type))
             elif selected_type == 'checkbox':
                 param_values = [True, False]
-                param_type = 'categorical'
+                param_type = 'checkbox'
                 parameters.append((selected_key, param_values, param_type))
             elif selected_type in ['radio', 'combobox']:
                 options = config[selected_key]['options']
@@ -118,7 +118,7 @@ def select_parameters(config):
                     param_values = list(options.keys())
                 else:
                     param_values = [list(options.keys())[int(choice) - 1] for choice in option_choices.split(',')]
-                param_type = 'categorical'
+                param_type = 'radio'
                 parameters.append((selected_key, param_values, param_type))
             else:
                 print("Invalid type. Please try again.")
@@ -151,7 +151,10 @@ async def main():
             param_name = param_details[0]
             value_ranges = param_details[1].split(",")
             param_type = value_ranges[0]
-            if param_type == "categorical":
+            if param_type == "checkbox":
+                param_values = [True if value == "True" else False for value in value_ranges[1:]]
+                parameters.append((param_name, param_values, param_type))
+            elif param_type == "radio":
                 param_values = value_ranges[1:]
                 parameters.append((param_name, param_values, param_type))
             else:
@@ -189,7 +192,7 @@ async def main():
     optimization_results = await optimizer.optimize()
 
     # Print cmd to run the program in non-interactive mode
-    params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'categorical' else f"{param[0]}:{param[2]},{''.join(param[1])}" for param in parameters])
+    params_cmd = ";".join([f"{param[0]}:{param[2]},{param[1][0]},{param[1][1]}" if param[2] != 'checkbox' and param[2] != 'radio' else f"{param[0]}:{param[2]},{''.join(str(val) for val in param[1])}" for param in parameters])
     logging.info(f"\nTo run again in non-interactive mode, use the following command:")
     logging.info(f"python main.py --script {script_obj.js_file_path} --params \"{params_cmd}\" --games {num_games} --balance {initial_balance / 100}")
 

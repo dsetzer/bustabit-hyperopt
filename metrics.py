@@ -84,11 +84,13 @@ class Statistics:
                 self.profit_ath = self.profit
             elif self.profit < self.profit_atl:
                 self.profit_atl = self.profit
+        
+            # print(self.duration, self.profit)
+            self.profit_per_hour = self.profit / (self.duration / 3600)
+        
         else:
             self.games_skipped += 1
 
-        # print(self.duration, self.profit)
-        self.profit_per_hour = self.profit / (self.duration / 3600)
  
     def get_metric(self):
         if self.total_wagered == 0 or self.games_played == 0:
