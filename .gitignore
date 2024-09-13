@@ -163,3 +163,6 @@ testing.py
 scripts/*
 !scripts/example.js
 .vscode/settings.json
+myenv
+frontend
+.vscode
