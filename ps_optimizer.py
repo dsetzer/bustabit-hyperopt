@@ -20,11 +20,48 @@ class PSOptimizer:
         self.damping = 0.5
 
         self.simulator = Simulator(self.script_obj)
-        
+
         self.initialize_particles()
-        
+
         self.gbest_value = float('inf')
         self.gbest_position = {key: 0.0 for key in self.particles[0].keys()}
+
+        self.storage = Storage('optimizations.db')
+
+    def save_optimization(self):
+        optimization_data = {
+            'script_obj': self.script_obj,
+            'initial_balance': self.initial_balance,
+            'game_results': self.game_results,
+            'parameter_names': self.parameter_names,
+            'space': self.space,
+            'num_particles': self.num_particles,
+            'max_iter': self.max_iter,
+            'c1': self.c1,
+            'c2': self.c2,
+            'w': self.w,
+            'damping': self.damping,
+            'gbest_value': self.gbest_value,
+            'gbest_position': self.gbest_position
+        }
+        self.storage.save_optimization(optimization_data)
+
+    def load_optimization(self, optimization_id):
+        optimization_data = self.storage.load_optimization(optimization_id)
+        if optimization_data:
+            self.script_obj = optimization_data['script_obj']
+            self.initial_balance = optimization_data['initial_balance']
+            self.game_results = optimization_data['game_results']
+            self.parameter_names = optimization_data['parameter_names']
+            self.space = optimization_data['space']
+            self.num_particles = optimization_data['num_particles']
+            self.max_iter = optimization_data['max_iter']
+            self.c1 = optimization_data['c1']
+            self.c2 = optimization_data['c2']
+            self.w = optimization_data['w']
+            self.damping = optimization_data['damping']
+            self.gbest_value = optimization_data['gbest_value']
+            self.gbest_position = optimization_data['gbest_position']
 
     def sample_from_space(self, param_name):
         param_details = self.space.get(param_name, {})
@@ -54,7 +91,7 @@ class PSOptimizer:
         self.velocities = []
         self.pbest_position = []
         self.pbest_value = []
-        
+
         for _ in range(self.num_particles):
             # Initialize particle with encoded values
             particle = {}
@@ -62,7 +99,7 @@ class PSOptimizer:
                 encoded_value = random.uniform(0, 100)
                 particle[param_name] = encoded_value
             self.particles.append(particle)
-            
+
             # Initialize velocity
             velocity = {}
             for key in particle.keys():
@@ -89,25 +126,25 @@ class PSOptimizer:
             param_details = self.space.get(param, {})
             param_type = param_details.get('type')
             param_range = param_details.get('range')
-            
+
             if param_type == 'number':
                 value = max(min(value, param_range[1]), param_range[0])
                 if param_details.get('is_integer'):
                     value = round(value)
                 particle[param] = value
-                
+
             elif param_type == 'payout':
                 value = max(min(value, param_range[1]), param_range[0])
                 particle[param] = round(value, 2)  # Assuming 2 decimal places are needed
-                
+
             elif param_type == 'balance':
                 value = max(min(value, param_range[1]), param_range[0])
                 value = max(0, round(value / 100) * 100)  # Must be non-negative and divisible by 100
                 particle[param] = value
-                
+
             elif param_type == 'checkbox':
                 particle[param] = bool(round(value / 100.0))
-                
+
             elif param_type == 'radio':
                 particle[param] = param_range[0]
 
@@ -127,7 +164,7 @@ class PSOptimizer:
                 if pbest_value is None or particle_value is None:
                     print(f"Warning: Encountered None value for key '{key}' in particle {i}. Skipping this key.")
                     continue
-                    
+
                 cognitive[key] = self.c1 * random.random() * (pbest_value - particle_value)
 
             # Calculate the social component for each particle
@@ -140,10 +177,17 @@ class PSOptimizer:
             for key, value in self.particles[i].items():
                 self.particles[i][key] += self.velocities[i][key]
 
-                if self.space[key]['type'] == 'checkbox':
+                # Ensure balance stays within bounds right after update
+                if self.space[key]['type'] == 'balance':
+                    min_value, max_value = self.space[key]['range']
+                    self.particles[i][key] = max(min(self.particles[i][key], max_value), min_value)
+
+                # Ensure other parameters also respect their bounds
+                elif self.space[key]['type'] == 'checkbox':
                     self.particles[i][key] = self.particles[i][key] >= 0
-                elif self.space[key]['type'] in ['balance', 'multiplier']:
-                    self.particles[i][key] = abs(self.particles[i][key])
+                elif self.space[key]['type'] in ['multiplier']:
+                    self.particles[i][key] = max(1, abs(self.particles[i][key]))
+
 
             # Evaluate the fitness of each particle
             fitness = await self.evaluate_fitness(self.particles[i])

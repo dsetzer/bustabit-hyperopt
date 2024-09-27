@@ -7,7 +7,8 @@ import asyncio
 from prettytable import PrettyTable
 from script import Script
 from simulator import GameResults
-#from optimizer import Optimizer
+from storage import Storage
+# from optimizer import Optimizer
 from ps_optimizer import PSOptimizer as Optimizer
 import gc
 import tracemalloc
@@ -127,7 +128,6 @@ def select_parameters(config):
         except (ValueError, IndexError):
             print('Invalid choice. Please try again.')
     return parameters
-
 async def main():
     parser = argparse.ArgumentParser(description='Optimize parameters in a JS script.')
     parser.add_argument('--script', help='Path to the JavaScript file.')
@@ -139,7 +139,7 @@ async def main():
     initial_balance = int(args.balance * 100)
     required_median = 1.98
     num_sets = 3
-    
+
     if args.script and args.params:
         js_file_path = args.script
         script_obj = Script(js_file_path)
@@ -180,7 +180,7 @@ async def main():
 
     # Generate the game result sets for the simulator
     game_results = GameResults(required_median, num_sets, num_games)
-    
+
     # Build the parameter space for the optimizer
     parameter_names = [param[0] for param in parameters]
     space = {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}
@@ -211,9 +211,8 @@ async def main():
     print("\nn[ Top 10 ]")
     for stat in top_stats[:10]:
         print(stat)
-        
+
     tracemalloc.stop()
-    gc.collect()
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -3,7 +3,7 @@ var config = {
     payout: { type: 'multiplier', label: 'Payout', value: 2 },
     waitNum: { type: 'number', label: 'Wait Skips', value: 3 }
 };
-Object.entries(config).forEach(c=>this[c[0]]=c[1].value);
+Object.entries(config).forEach((c) => (globalThis[c[0]] = c[1].value));
 log(config);
 //log(`Script is running with baseBet: ${baseBet}, payout: ${payout}, waitNum: ${waitNum}`);
 let currBet = baseBet, since = 0;

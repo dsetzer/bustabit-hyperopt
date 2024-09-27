@@ -37,7 +37,7 @@ class GameResults:
             median_bust = median(busts)
             if round(median_bust, 2) == self.required_median:
                 return generated_results
-  
+
 class Simulator:
     def __init__(self, script: Script):
         self.script = script
