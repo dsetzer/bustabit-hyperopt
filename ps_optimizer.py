@@ -1,11 +1,27 @@
-import numpy as np
-from simulator import Simulator
-from math import exp, log
-import random
 import logging
+import time
+
+import numpy as np
+import random
+from math import exp, log
+
+from simulator import Simulator
+from storage import Storage
+
+
+class Particle:
+    def __init__(self, position, velocity):
+        self.position = position
+        self.velocity = velocity
+        self.pbest_position = position
+        self.pbest_value = float('inf')
+
+    def __repr__(self):
+        return f"Particle(Position: {self.position}, Velocity: {self.velocity}, PBest: {self.pbest_position}, PBest Value: {self.pbest_value})"
+
 
 class PSOptimizer:
-    def __init__(self, script_obj, initial_balance, game_results, parameter_names, space):
+    def __init__(self, script_obj, initial_balance, game_results, parameter_names, space, optimization_id=None):
         self.script_obj = script_obj
         self.initial_balance = initial_balance
         self.game_results = game_results
@@ -21,47 +37,107 @@ class PSOptimizer:
 
         self.simulator = Simulator(self.script_obj)
 
+        self.storage = Storage('optimizations.db')
+        self.optimization_id = optimization_id or self.generate_optimization_id()
+        self.current_iteration = 0
+        self.load_or_initialize_optimization()
+
+    def generate_optimization_id(self):
+        while True:
+            optimization_id = f"opt_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+            if not self.storage.optimization_exists(optimization_id):
+                return optimization_id
+    def initialize_optimization(self):
+        self.current_iteration = 0
+        self.gbest_value = float('inf')
+        self.gbest_position = {key: 0.0 for key in self.parameter_names}
         self.initialize_particles()
 
-        self.gbest_value = float('inf')
-        self.gbest_position = {key: 0.0 for key in self.particles[0].keys()}
+    def load_or_initialize_optimization(self):
+        if self.optimization_id:
+            loaded_state = self.storage.load_optimization(self.optimization_id)
+            if loaded_state:
+                self.load_optimization_state(loaded_state)
+            else:
+                self.initialize_optimization()
+        else:
+            self.initialize_optimization()
 
-        self.storage = Storage('optimizations.db')
+    def load_optimization_state(self, state):
+        self.num_particles = state['num_particles']
+        self.max_iter = state['max_iter']
+        self.c1 = state['c1']
+        self.c2 = state['c2']
+        self.w = state['w']
+        self.damping = state['damping']
+        self.gbest_value = state['gbest_value']
+        self.gbest_position = state['gbest_position']
+        self.current_iteration = state['current_iteration']
 
-    def save_optimization(self):
+        # Load particles from the latest iteration state
+        latest_iteration = self.storage.load_iteration_state(self.optimization_id, self.current_iteration)
+        if latest_iteration:
+            self.particles = [
+                Particle(
+                    position=particle_data['position'],
+                    velocity=particle_data['velocity']
+                ) for particle_data in latest_iteration['particles']
+            ]
+            for particle, particle_data in zip(self.particles, latest_iteration['particles']):
+                particle.pbest_position = particle_data['pbest_position']
+                particle.pbest_value = particle_data['pbest_value']
+
+            self.gbest_position = latest_iteration['gbest_position']
+            self.gbest_value = latest_iteration['gbest_value']
+        else:
+            self.initialize_particles()
+    def save_optimization_state(self):
         optimization_data = {
-            'script_obj': self.script_obj,
-            'initial_balance': self.initial_balance,
-            'game_results': self.game_results,
-            'parameter_names': self.parameter_names,
-            'space': self.space,
-            'num_particles': self.num_particles,
-            'max_iter': self.max_iter,
-            'c1': self.c1,
-            'c2': self.c2,
-            'w': self.w,
-            'damping': self.damping,
-            'gbest_value': self.gbest_value,
-            'gbest_position': self.gbest_position
+            "optimization_id": self.optimization_id,
+            "script_obj": self.script_obj,
+            "initial_balance": self.initial_balance,
+            "num_particles": self.num_particles,
+            "max_iter": self.max_iter,
+            "c1": self.c1,
+            "c2": self.c2,
+            "w": self.w,
+            "damping": self.damping,
+            "gbest_value": self.gbest_value,
+            "gbest_position": self.gbest_position,
+            "status": "in_progress",
+            "current_iteration": self.current_iteration
         }
         self.storage.save_optimization(optimization_data)
 
-    def load_optimization(self, optimization_id):
-        optimization_data = self.storage.load_optimization(optimization_id)
-        if optimization_data:
-            self.script_obj = optimization_data['script_obj']
-            self.initial_balance = optimization_data['initial_balance']
-            self.game_results = optimization_data['game_results']
-            self.parameter_names = optimization_data['parameter_names']
-            self.space = optimization_data['space']
-            self.num_particles = optimization_data['num_particles']
-            self.max_iter = optimization_data['max_iter']
-            self.c1 = optimization_data['c1']
-            self.c2 = optimization_data['c2']
-            self.w = optimization_data['w']
-            self.damping = optimization_data['damping']
-            self.gbest_value = optimization_data['gbest_value']
-            self.gbest_position = optimization_data['gbest_position']
+        iteration_data = {
+            "iteration": self.current_iteration,
+            "particles": [
+                {
+                    "position": particle.position,
+                    "velocity": particle.velocity,
+                    "pbest_position": particle.pbest_position,
+                    "pbest_value": particle.pbest_value
+                } for particle in self.particles
+            ],
+            "gbest_position": self.gbest_position,
+            "gbest_value": self.gbest_value
+        }
+        self.storage.save_iteration_state(self.optimization_id, iteration_data)
+
+    def initialize_particles(self):
+        self.particles = []
+
+        for _ in range(self.num_particles):
+            # Initialize particle with sampled values
+            position = {}
+            velocity = {}
+            for param_name in self.parameter_names:
+                position[param_name] = self.sample_from_space(param_name)
+                velocity[param_name] = random.uniform(-1, 1)
+
+            # Create a new Particle instance
+            particle = Particle(position, velocity)
+            self.particles.append(particle)
 
     def sample_from_space(self, param_name):
         param_details = self.space.get(param_name, {})
@@ -71,7 +147,6 @@ class PSOptimizer:
         if param_type == 'balance':
             return round(random.uniform(param_range[0], param_range[1]) / 100) * 100
         elif param_type == 'number':
-            # check if it's an integer or float
             if param_details.get('is_integer'):
                 return round(random.uniform(param_range[0], param_range[1]))
             else:
@@ -84,31 +159,9 @@ class PSOptimizer:
         elif param_type == 'checkbox':
             return bool(random.getrandbits(1))
         elif param_type == 'radio':
-            return param_range[0]
-
-    def initialize_particles(self):
-        self.particles = []
-        self.velocities = []
-        self.pbest_position = []
-        self.pbest_value = []
-
-        for _ in range(self.num_particles):
-            # Initialize particle with encoded values
-            particle = {}
-            for param_name in self.parameter_names:
-                encoded_value = random.uniform(0, 100)
-                particle[param_name] = encoded_value
-            self.particles.append(particle)
-
-            # Initialize velocity
-            velocity = {}
-            for key in particle.keys():
-                velocity[key] = random.uniform(-1, 1)
-            self.velocities.append(velocity)
-
-            # Initialize personal best
-            self.pbest_position.append(particle.copy())
-            self.pbest_value.append(float('inf'))
+            return random.choice(param_range)
+        else:
+            raise ValueError(f"Unknown parameter type: {param_type}")
 
     async def evaluate_fitness(self, particle):
         try:
@@ -121,93 +174,92 @@ class PSOptimizer:
             fitness = float('inf')
         return fitness
 
+    def enforce_constraint(self, param_name, value):
+        param_details = self.space.get(param_name, {})
+        param_type = param_details.get('type')
+        param_range = param_details.get('range')
+
+        if param_type == 'balance':
+            return max(min(round(value / 100) * 100, param_range[1]), param_range[0])
+        elif param_type == 'number':
+            if param_details.get('is_integer'):
+                return round(max(min(value, param_range[1]), param_range[0]))
+            else:
+                return max(min(value, param_range[1]), param_range[0])
+        elif param_type == 'payout':
+            return max(min(value, param_range[1]), param_range[0])
+        elif param_type == 'checkbox':
+            return bool(round(value))
+        elif param_type == 'radio':
+            return param_range[0]  # Always return the first option for radio
+        else:
+            raise ValueError(f"Unknown parameter type: {param_type}")
+
     def enforce_constraints(self, particle):
-        for param, value in particle.items():
-            param_details = self.space.get(param, {})
-            param_type = param_details.get('type')
-            param_range = param_details.get('range')
-
-            if param_type == 'number':
-                value = max(min(value, param_range[1]), param_range[0])
-                if param_details.get('is_integer'):
-                    value = round(value)
-                particle[param] = value
-
-            elif param_type == 'payout':
-                value = max(min(value, param_range[1]), param_range[0])
-                particle[param] = round(value, 2)  # Assuming 2 decimal places are needed
-
-            elif param_type == 'balance':
-                value = max(min(value, param_range[1]), param_range[0])
-                value = max(0, round(value / 100) * 100)  # Must be non-negative and divisible by 100
-                particle[param] = value
-
-            elif param_type == 'checkbox':
-                particle[param] = bool(round(value / 100.0))
-
-            elif param_type == 'radio':
-                particle[param] = param_range[0]
-
-        return particle
+        return {param: self.enforce_constraint(param, value) for param, value in particle.items()}
 
     async def update_particles(self):
-        for i in range(self.num_particles):
-            # Calculate the inertia component for each particle
-            inertia = {key: self.w * self.velocities[i][key] for key in self.particles[i].keys()}
+        for particle in self.particles:
+            # Calculate the inertia component
+            inertia = {key: self.w * particle.velocity[key] for key in particle.position.keys()}
 
-            # Calculate the cognitive component safely by checking for None values
-            cognitive = {}
-            for key in self.particles[i].keys():
-                pbest_value = self.pbest_position[i].get(key)
-                particle_value = self.particles[i].get(key)
+            # Calculate the cognitive component
+            cognitive = {key: self.c1 * random.random() * (particle.pbest_position[key] - particle.position[key])
+                for key in particle.position.keys()}
 
-                if pbest_value is None or particle_value is None:
-                    print(f"Warning: Encountered None value for key '{key}' in particle {i}. Skipping this key.")
-                    continue
+            # Calculate the social component
+            social = {key: self.c2 * random.random() * (self.gbest_position[key] - particle.position[key])
+                for key in particle.position.keys()}
 
-                cognitive[key] = self.c1 * random.random() * (pbest_value - particle_value)
+            # Update the velocity of the particle
+            for key in particle.velocity.keys():
+                particle.velocity[key] = inertia[key] + cognitive[key] + social[key]
 
-            # Calculate the social component for each particle
-            social = {key: self.c2 * random.random() * (self.gbest_position[key] - self.particles[i][key]) for key in self.particles[i].keys()}
+            # Update the position of the particle and enforce constraints
+            for key in particle.position.keys():
+                particle.position[key] += particle.velocity[key]
+                particle.position[key] = self.enforce_constraint(key, particle.position[key])
 
-            # Update the velocity of each particle
-            self.velocities[i] = {key: inertia[key] + cognitive.get(key, 0) + social[key] for key in self.particles[i].keys()}
-
-            # Update the position of each particle and enforce constraints
-            for key, value in self.particles[i].items():
-                self.particles[i][key] += self.velocities[i][key]
-
-                # Ensure balance stays within bounds right after update
-                if self.space[key]['type'] == 'balance':
-                    min_value, max_value = self.space[key]['range']
-                    self.particles[i][key] = max(min(self.particles[i][key], max_value), min_value)
-
-                # Ensure other parameters also respect their bounds
-                elif self.space[key]['type'] == 'checkbox':
-                    self.particles[i][key] = self.particles[i][key] >= 0
-                elif self.space[key]['type'] in ['multiplier']:
-                    self.particles[i][key] = max(1, abs(self.particles[i][key]))
-
-
-            # Evaluate the fitness of each particle
-            fitness = await self.evaluate_fitness(self.particles[i])
-            print(f"Particle {i} has a fitness of {fitness}")  # Debugging log
+            # Evaluate the fitness of the particle
+            fitness = await self.evaluate_fitness(particle.position)
+            print(f"Particle has a fitness of {fitness}")  # Debugging log
 
             # Update personal and global bests
-            if fitness < self.pbest_value[i]:
-                self.pbest_position[i] = self.particles[i].copy()
-                self.pbest_value[i] = fitness
+            if fitness < particle.pbest_value:
+                particle.pbest_position = particle.position.copy()
+                particle.pbest_value = fitness
 
             if fitness < self.gbest_value:
-                self.gbest_position = self.particles[i].copy()
+                self.gbest_position = particle.position.copy()
                 self.gbest_value = fitness
 
         logging.info(f"Current best fitness: {self.gbest_value}")
 
     async def optimize(self):
-        for iter_num in range(self.max_iter):
+        for iter_num in range(self.current_iteration, self.max_iter):
+            self.current_iteration = iter_num
             logging.info(f"Iteration {iter_num + 1}")
             await self.update_particles()
+            self.save_optimization_state()
 
+        self.save_final_result()
         logging.info(f"Optimization complete. Best position: {self.gbest_position}, Best value: {self.gbest_value}")
-        return {'best_parameters': self.gbest_position, 'best_metric': self.gbest_value, 'top_5_results': []}
+        return {'best_parameters': self.gbest_position, 'best_metric': self.gbest_value}
+
+    def save_final_result(self):
+        final_state = {
+            "optimization_id": self.optimization_id,
+            "script_obj": self.script_obj,
+            "initial_balance": self.initial_balance,
+            "num_particles": self.num_particles,
+            "max_iter": self.max_iter,
+            "c1": self.c1,
+            "c2": self.c2,
+            "w": self.w,
+            "damping": self.damping,
+            "gbest_value": self.gbest_value,
+            "gbest_position": self.gbest_position,
+            "status": "completed",
+            "current_iteration": self.current_iteration
+        }
+        self.storage.update_optimization(self.optimization_id, final_state)

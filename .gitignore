@@ -166,3 +166,4 @@ scripts/*
 myenv
 frontend
 .vscode
+optimizations.db
