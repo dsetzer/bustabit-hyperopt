@@ -13,7 +13,6 @@ from ps_optimizer import PSOptimizer as Optimizer
 import gc
 import tracemalloc
 
-tracemalloc.start()
 np.int = np.int64 # Fix for a bug in skopt
 
 def get_default_range(param_type, default_value):
@@ -129,18 +128,34 @@ def select_parameters(config):
             print('Invalid choice. Please try again.')
     return parameters
 async def main():
+    # enable garbage collection and memory profiling
+    gc.enable()
+    tracemalloc.start()
+
+    # Create the log file
+    logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
+
+    # get parameters
     parser = argparse.ArgumentParser(description='Optimize parameters in a JS script.')
     parser.add_argument('--script', help='Path to the JavaScript file.')
     parser.add_argument('--params', help='Parameters to optimize.')
     parser.add_argument('--games', type=int, default=1000, help='Number of games to simulate. Defaults to 1000.')
     parser.add_argument('--balance', type=float, default=10000, help='Initial balance in bits. Defaults to 10000 bits.')
+    parser.add_argument('--sets', type=int, default=3, help='Number of redundant result sets to use. Defaults to 3.')
+    # parser.add_argument('--resume', type=int, default=0, help='Resume optimization from a specific iteration. Defaults to 0.')
+
+    # parse arguments
     args = parser.parse_args()
     num_games = args.games
+    # store initial balance as sats instead of bits
     initial_balance = int(args.balance * 100)
     required_median = 1.98
-    num_sets = 3
 
+    num_sets = args.sets
+
+    # initialize storage
     storage = Storage('optimizations.db')
+    script_obj = None
 
     if args.script and args.params:
         js_file_path = args.script
@@ -164,19 +179,35 @@ async def main():
                 max_value = float(value_ranges[2])
                 parameters.append((param_name, (min_value, max_value), param_type))
     else:
-        js_file_path = input("Enter the path to the JavaScript file: ")
-        script_obj = Script(js_file_path)
-
         existing_scripts = storage.get_all_scripts()
         if existing_scripts:
             print("Existing scripts found:")
             for idx, script in enumerate(existing_scripts):
-                print(f"{idx + 1}. ID: {script['id']}, Path: {script['path']}, Last Updated: {script['timestamp']}")
+                print(f"{idx + 1}. ID: {script['id']}, Filename: {script['file_name']}, Config Parameters: {', '.join(script['config_params'])}, Last Updated: {script['last_updated']}")
 
-            choice = input("Enter the number of the script to reuse, or 'n' for a new script: ")
-            if choice.lower() != 'n':
-                script_id = existing_scripts[int(choice) - 1]['id']
-                script_obj = storage.get_script_by_id(script_id)
+            while True:
+                choice = input("Enter the number of the script to reuse, 'n' for a new script, or 'd' to delete a script: ")
+                if choice.lower() == 'n':
+                    create_script()
+                    break
+                elif choice.lower() == 'd':
+                    delete_choice = int(input("Enter the number of the script to delete: "))
+                    script_id = existing_scripts[delete_choice - 1]['id']
+                    storage.delete_script(script_id)
+                    existing_scripts = storage.get_all_scripts()
+                    if not existing_scripts:
+                        logging.info("No scripts left. Creating a new one.")
+                        js_file_path = input("Enter the path to the JavaScript file: ")
+                        script_obj = Script(js_file_path)
+                        break
+                else:
+                    script_id = existing_scripts[int(choice) - 1]['id']
+                    script_obj = storage.get_script_by_id(script_id)
+                    break
+        
+        else:
+            js_file_path = input("Enter the path to the JavaScript file: ")
+            script_obj = Script(js_file_path)
 
         parameters = select_parameters(script_obj.config)
 
@@ -186,10 +217,8 @@ async def main():
         initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
         initial_balance = int(float(initial_balance) * 100) if initial_balance else 1000000
 
-
-    # Create the log file
-    logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
-
+        num_sets = input("Enter the number of redundant result sets to use [default: 3]: ")
+        num_sets = int(num_sets) if num_sets else 3
 
     # Check if there's an existing optimization to resume
     existing_optimizations = storage.get_all_optimizations()
@@ -253,5 +282,20 @@ async def main():
         print(stat)
 
     tracemalloc.stop()
+
+def create_script():
+    js_file_path = input("Enter the path to the JavaScript file: ")
+    script_obj = Script(js_file_path)
+
+    script_data = {
+        "id": script_obj.id,
+        "path": script_obj.js_file_path,
+        "timestamp": script_obj.timestamp,
+        "config": script_obj.config,
+    }
+
+    storage.create_script(script_data)
+    return script_obj
+
 if __name__ == "__main__":
     asyncio.run(main())

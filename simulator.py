@@ -83,8 +83,11 @@ class Simulator:
 
             return statistics, None
 
-    async def run(self, initial_balance, game_results, script_params):
+    async def run_multi_simulation(self, initial_balance, game_results, script_params):
         try:
+            # tracemalloc.start()
+            # snapshot0 = tracemalloc.take_snapshot()
+
             self.shouldStop = False
             self.shouldStopReason = None
 
@@ -103,6 +106,12 @@ class Simulator:
                 raise Exception("All simulations returned None or an empty list. No average statistics available.")
 
             averaged_statistics = Statistics.average_statistics(aggregated_statistics)
+
+            # snapshot1 = tracemalloc.take_snapshot()
+            # top_stats = snapshot1.compare_to(snapshot0, 'lineno')
+            # print("[ Top 10 differences ]")
+            # for stat in top_stats[:10]:
+            #     print(stat)
 
             return averaged_statistics, None
         except Exception as e:

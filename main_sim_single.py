@@ -33,7 +33,7 @@ def print_results(results):
     for key, value in results.items():
         table.add_row([key, value])
     print(table)
-    
+
 def main():
     script_path = get_input("Enter the path to the script: ")
     hash_value = get_input("Enter the hash value: ")
@@ -53,7 +53,7 @@ def main():
     results_file_path = os.path.join(folder_name, "results.txt")
     with open(results_file_path, "w") as results_file:
         loop = asyncio.get_event_loop()
-        simulation_task = loop.create_task(simulator.run(initial_balance, game_results, {}))
+        simulation_task = loop.create_task(simulator.run_multi_simulation(initial_balance, game_results, {}))
 
         try:
             loop.run_until_complete(simulation_task)

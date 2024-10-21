@@ -3,6 +3,7 @@ import STPyV8 as V8
 import json
 import logging
 from copy import deepcopy
+import hashlib
 
 class Script:
     def __init__(self, file_path: str):
@@ -41,7 +42,7 @@ class Script:
             else:
                 python_dict[key] = value
         return python_dict
-    
+
     def dict_to_object(self, py_dict: dict):
         """Converts a Python dictionary to a JavaScript object string
 
@@ -119,3 +120,13 @@ class Script:
         config_code += "};\n"
 
         return config_code + self.js_code
+
+    def generate_id(self, new_values: dict):
+        """Generates an id from a set of configuration parameter values
+
+        :param new_values: A dictionary of parameter names and values to set
+        :return: A string representation of the id
+        """
+        updated_config = self.get_config(new_values)
+        config_str = json.dumps(updated_config, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()

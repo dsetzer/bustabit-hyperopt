@@ -18,14 +18,14 @@ class TestSimulator(unittest.TestCase):
 
     def test_run(self):
         initial_balance = 1000000
-        result = asyncio.run(self.simulator.run(initial_balance, self.game_results))
+        result = asyncio.run(self.simulator.run_multi_simulation(initial_balance, self.game_results))
         self.assertIsNotNone(result["config"])
         self.assertIsNotNone(result["results"])
         self.assertIsNotNone(result["output"])
         print(result["config"])
         print(result["results"])
         print(result["output"])
-        
+
 simulator = TestSimulator()
 simulator.setUp()
 # simulator.test_run_single_simulation()
