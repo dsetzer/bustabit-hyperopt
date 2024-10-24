@@ -54,7 +54,7 @@ class Simulator:
             engine.stopping = True
             if engine.next is not None:
                 engine.next = None
-            print("Script stopped:", reason)
+            # print("Script stopped:", reason)
 
         def SHA256(text: str):
             return hashlib.sha256(text.encode()).hexdigest()
@@ -62,14 +62,15 @@ class Simulator:
         def gameResultFromHash(game_hash: str):
             return GameResults.generate_games(game_hash, 1)[0]
 
-        pm.eval_js(self.script.merge_config())
         pm.set_js_variable("engine", engine)
         pm.set_js_variable("userInfo", userInfo)
         pm.set_js_variable("stop", stop)
-        pm.set_js_variable("log", lambda *msgs: None)  # Discard log messages
+        pm.set_js_variable("log", lambda *msgs: None)  # Discard log messages?
         pm.set_js_variable("SHA256", SHA256)
-        pm.set_js_variable("gameResultFromHash", gameResultFromHash)
-        pm.set_js_variable("config", self.script.get_config(script_params))
+        # pm.set_js_variable("gameResultFromHash", gameResultFromHash)
+        #pm.set_js_variable("config", self.script.get_config(script_params))
+
+        pm.eval_js(self.script.merge_config())
 
         try:
             for game in game_set:
