@@ -7,7 +7,7 @@ from metrics import Statistics
 from statistics import median
 from engine import Engine, History, UserInfo
 from script import Script
-import STPyV8
+import pythonmonkey as pm
 import asyncio
 
 class GameResults:
@@ -62,26 +62,25 @@ class Simulator:
         def gameResultFromHash(game_hash: str):
             return GameResults.generate_games(game_hash, 1)[0]
 
-        with STPyV8.JSContext() as js_context:
-            js_context.locals.engine = engine
-            js_context.locals.userInfo = userInfo
-            js_context.locals.stop = stop
-            js_context.locals.log = lambda *msgs: None  # Discard log messages
-            js_context.locals.SHA256 = SHA256
-            js_context.locals.gameResultFromHash = gameResultFromHash
-            js_context.locals.config = self.script.get_config(script_params)
-            js_context.eval(self.script.js_code)
+        pm.eval_js(self.script.merge_config())
+        pm.set_js_variable("engine", engine)
+        pm.set_js_variable("userInfo", userInfo)
+        pm.set_js_variable("stop", stop)
+        pm.set_js_variable("log", lambda *msgs: None)  # Discard log messages
+        pm.set_js_variable("SHA256", SHA256)
+        pm.set_js_variable("gameResultFromHash", gameResultFromHash)
+        pm.set_js_variable("config", self.script.get_config(script_params))
 
-            try:
-                for game in game_set:
-                    await engine._nextGame(game)
-                    statistics.update(engine)
-                    if self.shouldStop:
-                        break
-            except ValueError as e:  # Catch the insufficient balance error
-                return Statistics(0), None  # Return a Statistics object with a very low balance to indicate failure
+        try:
+            for game in game_set:
+                await engine._nextGame(game)
+                statistics.update(engine)
+                if self.shouldStop:
+                    break
+        except ValueError as e:  # Catch the insufficient balance error
+            return Statistics(0), None  # Return a Statistics object with a very low balance to indicate failure
 
-            return statistics, None
+        return statistics, None
 
     async def run(self, initial_balance, game_results, script_params):
         try:

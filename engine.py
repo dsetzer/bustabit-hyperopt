@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import deque
-import STPyV8
+import pythonmonkey
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -30,7 +30,7 @@ class History:
         return list(self.data)
 
 
-class Engine(STPyV8.JSClass):
+class Engine:
     def __init__(self, user_info):
         self._callback_event = asyncio.Event()
         self._callback_counter = 0

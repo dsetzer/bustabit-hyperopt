@@ -1,5 +1,5 @@
 # pylint: disable=import-error, missing-function-docstring, missing-class-docstring, missing-module-docstring
-import STPyV8 as V8
+import pythonmonkey as pm
 import json
 import logging
 from copy import deepcopy
@@ -27,16 +27,16 @@ class Script:
             js_code = file.read()
         return js_code
 
-    def object_to_dict(self, js_obj: V8.JSObject):
+    def object_to_dict(self, js_obj):
         """Converts a JSObject to a Python dictionary
 
         :param js_obj: The JSObject to convert
         :return: A Python dictionary with the same keys and values as the JSObject
         """
         python_dict = {}
-        for key in js_obj.keys():
+        for key in js_obj:
             value = js_obj[key]
-            if isinstance(value, V8.JSObject):
+            if isinstance(value, dict):
                 python_dict[key] = self.object_to_dict(value)
             else:
                 python_dict[key] = value
@@ -59,24 +59,24 @@ class Script:
         :return: A tuple of the config object and the remaining script code
         """
         start_index = raw_js_code.find('var config = {')
-        if start_index == -1:
+        if (start_index == -1):
             raise FileNotFoundError("Config object not found")
 
         end_index = start_index
         brace_count = 0
         for i, char in enumerate(raw_js_code[start_index:]):
-            if char == '{':
+            if (char == '{'):
                 brace_count += 1
-            elif char == '}':
+            elif (char == '}'):
                 brace_count -= 1
-                if brace_count == 0:
+                if (brace_count == 0):
                     end_index = start_index + i
                     break
 
         # Move the end index to the next character after any whitespace or semicolons
         for i, char in enumerate(raw_js_code[end_index + 1:]):
-            if char.strip():  # Stop at the first non-whitespace character
-                if char == ';':
+            if (char.strip()):  # Stop at the first non-whitespace character
+                if (char == ';'):
                     end_index += i + 1
                 break
 
@@ -84,10 +84,9 @@ class Script:
         config_code = raw_js_code[start_index:end_index + 1]
         remaining_code = raw_js_code[:start_index] + raw_js_code[end_index + 1:]
 
-        with V8.JSContext() as ctxt:
-            ctxt.eval(config_code)
-            config_object = ctxt.eval("config")
-            config = self.object_to_dict(config_object)
+        pm.eval_js(config_code)
+        config_object = pm.get_js_variable("config")
+        config = self.object_to_dict(config_object)
 
         return config, remaining_code
 
@@ -100,9 +99,9 @@ class Script:
         """
         updated_config = deepcopy(self.config)
         for key, value in new_values.items():
-            if key not in updated_config:
+            if (key not in updated_config):
                 raise KeyError(f"Parameter {key} not found in config")
-            if updated_config[key]['type'] == 'balance':
+            if (updated_config[key]['type'] == 'balance'):
                 updated_config[key]['value'] = int(float(value)) * 100
             else:
                 updated_config[key]['value'] = value
