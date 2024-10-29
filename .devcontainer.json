@@ -1,7 +1,0 @@
-{
-  "tasks": {
-    "test": "pip install -r requirements.txt && pytest test_ps_optimizer.py && pytest test_simulator.py",
-    "build": "pip install -r requirements.txt",
-    "launch": "python main.py"
-  }
-}
