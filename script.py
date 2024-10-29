@@ -4,6 +4,7 @@ import json
 import logging
 from copy import deepcopy
 
+
 class Script:
     def __init__(self, file_path: str):
         """Initializes a Script object
@@ -84,7 +85,7 @@ class Script:
         config_code = raw_js_code[start_index:end_index + 1]
         remaining_code = raw_js_code[:start_index] + raw_js_code[end_index + 1:]
 
-        pm.eval_js(config_code)
+        pm.eval(config_code)
         config_object = pm.get_js_variable("config")
         config = self.object_to_dict(config_object)
 
