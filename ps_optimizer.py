@@ -151,7 +151,7 @@ class PSOptimizer:
                 return round(random.uniform(param_range[0], param_range[1]))
             else:
                 return random.uniform(param_range[0], param_range[1])
-        elif param_type == 'payout':
+        elif param_type == 'multiplier':
             u = np.random.random()
             min_val, max_val = param_range
             normalization = 0.99 * log(max_val) - 0.99 * log(min_val)
@@ -186,7 +186,7 @@ class PSOptimizer:
                 return round(max(min(value, param_range[1]), param_range[0]))
             else:
                 return max(min(value, param_range[1]), param_range[0])
-        elif param_type == 'payout':
+        elif param_type == 'multiplier':
             return max(min(value, param_range[1]), param_range[0])
         elif param_type == 'checkbox':
             return bool(round(value))

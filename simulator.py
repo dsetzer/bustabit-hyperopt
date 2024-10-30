@@ -38,6 +38,10 @@ class GameResults:
             if round(median_bust, 2) == self.required_median:
                 return generated_results
 
+import pythonmonkey as pm
+from engine import Engine, UserInfo
+from metrics import Statistics
+
 class Simulator:
     def __init__(self, script: Script):
         self.script = script
@@ -54,7 +58,6 @@ class Simulator:
             engine.stopping = True
             if engine.next is not None:
                 engine.next = None
-            # print("Script stopped:", reason)
 
         def SHA256(text: str):
             return hashlib.sha256(text.encode()).hexdigest()
@@ -62,15 +65,16 @@ class Simulator:
         def gameResultFromHash(game_hash: str):
             return GameResults.generate_games(game_hash, 1)[0]
 
-        pm.set_js_variable("engine", engine)
-        pm.set_js_variable("userInfo", userInfo)
-        pm.set_js_variable("stop", stop)
-        pm.set_js_variable("log", lambda *msgs: None)  # Discard log messages?
-        pm.set_js_variable("SHA256", SHA256)
-        # pm.set_js_variable("gameResultFromHash", gameResultFromHash)
-        #pm.set_js_variable("config", self.script.get_config(script_params))
+        # Set JavaScript variables
+        pm.globalThis.engine = engine
+        pm.globalThis.userInfo = userInfo
+        pm.globalThis.stop = stop
+        pm.globalThis.log = lambda *msgs: None  # Discard log messages
+        pm.globalThis.SHA256 = SHA256
+        pm.globalThis.gameResultFromHash = gameResultFromHash
 
-        pm.eval_js(self.script.merge_config())
+        # Evaluate the script with the merged config
+        pm.eval(self.script.merge_config())
 
         try:
             for game in game_set:
