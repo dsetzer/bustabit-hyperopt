@@ -29,7 +29,6 @@ class History:
     def toArray(self):
         return list(self.data)
 
-
 class Engine:
     def __init__(self, user_info):
         self._callback_event = asyncio.Event()
@@ -93,7 +92,11 @@ class Engine:
         return None
 
     def cashOut(self):
-        pass
+        if self.wager is not None and self.payout is not None:
+            self.cashedAt = self.payout
+            self._userInfo.balance += (self.wager * self.payout)
+            self._userInfo.profit += (self.wager * (self.payout - 1))
+            asyncio.create_task(self._emit('CASHED_OUT', {'uname': self._userInfo.uname, 'wager': self.wager, 'cashedAt': self.cashedAt}))
 
     async def _emit(self, event, *args):
         self._callback_counter += len(self._event_callbacks[event])
@@ -108,7 +111,7 @@ class Engine:
         self.gameId = gameResult['id']
         # Reset the game variables
         self.hash = self.bust = self.wager = self.payout = self.cashedAt = None
-        
+
         # Emit the game starting event
         self.gameState = "GAME_STARTING"
         await self._emit('GAME_STARTING')
@@ -133,25 +136,21 @@ class Engine:
 
         # If a bet was placed check if it was a winner
         if self.wager is not None and self.payout <= self.bust:
-            self.cashedAt = self.payout
-            self._userInfo.balance += (self.wager * self.payout)
-            self._userInfo.profit += (self.wager * (self.payout - 1))
-            await self._emit('CASHED_OUT', {'uname': self._userInfo.uname, 'wager': self.wager, 'cashedAt': self.cashedAt })
+            self.cashOut()
 
         # Append the game to the history
         self.history.append({
             'id': self.gameId,
             'hash': self.hash,
             'bust': self.bust,
-            'wager': self.wager, 
+            'wager': self.wager,
             'payout': self.payout,
             'cashedAt': self.cashedAt
         })
-        
+
         # Emit the game ended event
         self.gameState = "GAME_ENDED"
         await self._emit('GAME_ENDED')
-        
 
     def _done(self):
         self._callback_counter -= 1

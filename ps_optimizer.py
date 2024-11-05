@@ -8,7 +8,6 @@ from math import exp, log
 from simulator import Simulator
 from storage import Storage
 
-
 class Particle:
     def __init__(self, position, velocity):
         self.position = position
@@ -18,7 +17,6 @@ class Particle:
 
     def __repr__(self):
         return f"Particle(Position: {self.position}, Velocity: {self.velocity}, PBest: {self.pbest_position}, PBest Value: {self.pbest_value})"
-
 
 class PSOptimizer:
     def __init__(self, script_obj, initial_balance, game_results, parameter_names, space, optimization_id=None):
@@ -47,6 +45,7 @@ class PSOptimizer:
             optimization_id = f"opt_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
             if not self.storage.optimization_exists(optimization_id):
                 return optimization_id
+
     def initialize_optimization(self):
         self.current_iteration = 0
         self.gbest_value = float('inf')
@@ -91,6 +90,7 @@ class PSOptimizer:
             self.gbest_value = latest_iteration['gbest_value']
         else:
             self.initialize_particles()
+
     def save_optimization_state(self):
         optimization_data = {
             "optimization_id": self.optimization_id,
