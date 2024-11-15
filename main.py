@@ -191,18 +191,6 @@ def main():
 
     # Print optimization results
     logging.info("\nOptimization complete!")
-<<<<<<< Updated upstream
-    logging.info(f"Optimal parameters: {optimization_results['best_parameters']}")
-    logging.info(f"Optimal metric: {optimization_results['best_metric']}")
-    print(f"\nBest Parameters: {optimization_results['best_parameters']}")
-    print(f"Best Metric: {optimization_results['best_metric']}")
-    print("\nTop 10 Optimization Results:")
-    for result in optimization_results['top_10_results']:
-        print(f"Rank {result['rank']}")
-        print("  Parameters: ", result['parameters'])
-        print("  Metric: ", result['metric'])
-
-=======
     logging.info(f"Best Parameters: {optimization_results['best_parameters']}")
     logging.info(f"Best Metric: {optimization_results['best_metric']}")
     logging.info("\nTop 5 Optimization Results:")
@@ -223,6 +211,5 @@ def main():
     tracemalloc.stop()
 
 
->>>>>>> Stashed changes
 if __name__ == "__main__":
     main()
