@@ -162,3 +162,7 @@ test.py
 testing.py
 scripts/*
 !scripts/example.js
+myenv
+.vscode
+frontend
+optimizations.db

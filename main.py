@@ -135,9 +135,10 @@ def main():
     initial_balance = int(args.balance * 100)
     required_median = 1.98
     num_sets = 3
-    
+
     if args.script and args.params:
         js_file_path = args.script
+        script_obj = Script(js_file_path)
         num_games = args.games or 1000
         params_list = args.params.split(";")
         parameters = []
@@ -168,14 +169,9 @@ def main():
     # Create the log file
     logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
 
-    # Load the script
-    script_obj = Script(js_file_path)
-
-
-
     # Generate the game result sets for the simulator
     game_results = GameResults(required_median, num_sets, num_games)
-    
+
     # Build the parameter space for the optimizer
     parameter_names = [param[0] for param in parameters]
     space = Space([Integer(param[1][0], param[1][1]) if param[2] == 'integer'
