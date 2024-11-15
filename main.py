@@ -195,6 +195,7 @@ def main():
 
     # Print optimization results
     logging.info("\nOptimization complete!")
+<<<<<<< Updated upstream
     logging.info(f"Optimal parameters: {optimization_results['best_parameters']}")
     logging.info(f"Optimal metric: {optimization_results['best_metric']}")
     print(f"\nBest Parameters: {optimization_results['best_parameters']}")
@@ -205,5 +206,27 @@ def main():
         print("  Parameters: ", result['parameters'])
         print("  Metric: ", result['metric'])
 
+=======
+    logging.info(f"Best Parameters: {optimization_results['best_parameters']}")
+    logging.info(f"Best Metric: {optimization_results['best_metric']}")
+    logging.info("\nTop 5 Optimization Results:")
+    for rank, result in optimization_results["top_5_results"]:
+        logging.info(f"Rank {rank + 1}")
+        logging.info(f"  Parameters: {result['parameters']}")
+        logging.info(f"  Metric: {result['metric']}")
+
+    # Close the storage connection
+    storage.close()
+
+    snapshot = tracemalloc.take_snapshot()
+    top_stats = snapshot.statistics("lineno")
+    print("\nn[ Top 10 ]")
+    for stat in top_stats[:10]:
+        print(stat)
+
+    tracemalloc.stop()
+
+
+>>>>>>> Stashed changes
 if __name__ == "__main__":
     main()
