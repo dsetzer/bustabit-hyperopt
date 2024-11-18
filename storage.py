@@ -205,22 +205,27 @@ class Storage:
             self.conn.rollback()
 
     def save_script(self, script_obj):
+        if not script_obj:
+            raise ValueError("Script object is null")
+
         try:
-            self.cursor.execute(
-                """
+            self.cursor.execute("""
                 INSERT OR REPLACE INTO scripts
                 (id, file_path, content, config)
                 VALUES (?, ?, ?, ?)
-            """,
-                (
-                    script_obj.script_id
+            """, (
+                    script_obj.script_id,
                     script_obj.js_file_path,
                     script_obj.js_code,
                     json.dumps(script_obj.config)
-                ),
-            )
+            ))
             self.conn.commit()
             return script_obj.js_file_path
+        except TypeError as e:
+            if "not JSON serializable" in str(e):
+                raise ValueError(f"Script config is not JSON serializable: {e}")
+            else:
+                raise e
         except sqlite3.Error as e:
             logging.error(f"An error occurred while saving script: {e}")
             self.conn.rollback()
