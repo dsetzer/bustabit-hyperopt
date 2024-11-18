@@ -167,8 +167,12 @@ class PSOptimizer:
         try:
             decoded_particle = self.enforce_constraints(particle)
             sim_result = await self.simulator.run(self.initial_balance, self.game_results, decoded_particle)
-            fitness = sim_result[0].get_metric()
-            print(f"Particle: {decoded_particle}, Fitness: {fitness}")
+            if sim_result[1] == "SCRIPT_ERROR":
+                fitness = float('inf')
+            elif sim_result[1] == "INSUFFICIENT_BALANCE":
+                fitness = float('inf')
+            else:
+                fitness = sim_result[0].get_metric()
         except Exception as e:
             print(f"Error evaluating fitness for particle {particle}: {e}")
             fitness = float('inf')

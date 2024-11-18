@@ -1,6 +1,7 @@
 import json
 import logging
 import pythonmonkey as pm
+from typing import Tuple, Dict, Any
 
 class Script:
     """Represents a JavaScript file with a config object"""
@@ -27,7 +28,7 @@ class Script:
         with open(file_path, 'r', encoding='utf-8') as file:
             return file.read()
 
-    def split_config(self, raw_js_code: str):
+    def split_config(self, raw_js_code: str) -> Tuple[Dict[str, Any], str]:
         """
         Parses the script contents and splits the config object from the rest of the script
 
@@ -39,7 +40,7 @@ class Script:
             raise ValueError("Config object not found in the script")
 
         end_index = raw_js_code.find('};', start_index) + 1
-        if end_index == 0:
+        if end_index == -1:
             raise ValueError("Invalid config object in the script")
 
         config_code = raw_js_code[start_index:end_index + 1]
@@ -51,7 +52,7 @@ class Script:
 
         return config_object, remaining_code
 
-    def deep_copy_config(self, config):
+    def deep_copy_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Creates a deep copy of the config object that works with pythonmonkey's JavaScript objects
 
@@ -60,7 +61,7 @@ class Script:
         """
         return json.loads(json.dumps(config))
 
-    def get_config(self, new_values: dict):
+    def get_config(self, new_values: Dict[str, Any]) -> Dict[str, Any]:
         """
         Returns a config object with the given parameters set to the given values
 
@@ -77,7 +78,7 @@ class Script:
                 updated_config[key]['value'] = value
         return updated_config
 
-    def merge_config(self):
+    def merge_config(self) -> str:
         """
         Returns the full script code with the config object merged in
 
@@ -86,41 +87,23 @@ class Script:
         config_code = f"var config = {json.dumps(self.config)};\n"
         return config_code + self.js_code
 
-    def create_context(self):
-        """
-        Creates a context for script evaluation
-
-        :return: A function that sets up the script context
-        """
-        context_creator = f"""
-        (function createContext(engine, userInfo, stop, log, SHA256, gameResultFromHash) {{
-            const context = Object.create(null);
-            
+    def evaluate(self, globals_dict: Dict[str, Any], script_params: Dict[str, Any]) -> Any:
+        context = f"""
+        (function createContext(context) {{
+            const {', '.join(globals_dict.keys())} = context;
+    
             {self.merge_config()}
-
+    
             // Expose only what we want from the script
-            context.onGameStarting = typeof onGameStarting !== 'undefined' ? onGameStarting : null;
-            context.onGameStarted = typeof onGameStarted !== 'undefined' ? onGameStarted : null;
-            context.onGameEnded = typeof onGameEnded !== 'undefined' ? onGameEnded : null;
-            
-            return context;
+            return {{
+                onGameStarting: typeof onGameStarting !== 'undefined' ? onGameStarting : null,
+                onGameStarted: typeof onGameStarted !== 'undefined' ? onGameStarted : null,
+                onGameEnded: typeof onGameEnded !== 'undefined' ? onGameEnded : null,
+            }};
         }})
         """
-        return pm.eval(context_creator)
-
-    def evaluate(self, globals_dict):
-        """
-        Evaluates the script in the created context
-
-        :param globals_dict: A dictionary of global variables to pass to the script
-        :return: The script context with exposed functions
-        """
-        context_creator = self.create_context()
-        return context_creator(
-            globals_dict['engine'],
-            globals_dict['userInfo'],
-            globals_dict['stop'],
-            globals_dict['log'],
-            globals_dict['SHA256'],
-            globals_dict['gameResultFromHash']
-        )
+        context_function = pm.eval(context)
+        if not context_function:
+            raise ValueError("Context function is null")
+    
+        return context_function(globals_dict)

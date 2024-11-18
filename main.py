@@ -8,7 +8,6 @@ from prettytable import PrettyTable
 from script import Script
 from simulator import GameResults
 from storage import Storage
-# from optimizer import Optimizer
 from ps_optimizer import PSOptimizer as Optimizer
 import gc
 import tracemalloc
@@ -128,6 +127,7 @@ def select_parameters(config):
         except (ValueError, IndexError):
             print('Invalid choice. Please try again.')
     return parameters
+
 async def main():
     parser = argparse.ArgumentParser(description='Optimize parameters in a JS script.')
     parser.add_argument('--script', help='Path to the JavaScript file.')
@@ -135,10 +135,14 @@ async def main():
     parser.add_argument('--games', type=int, default=1000, help='Number of games to simulate. Defaults to 1000.')
     parser.add_argument('--balance', type=float, default=10000, help='Initial balance in bits. Defaults to 10000 bits.')
     args = parser.parse_args()
-    num_games = args.games
-    initial_balance = int(args.balance * 100)
+
     required_median = 1.98
     num_sets = 3
+    num_games = 1000
+    initial_balance = 10000
+    script_obj = None
+    parameters = None
+
 
     storage = Storage('optimizations.db')
 
@@ -173,52 +177,34 @@ async def main():
             for idx, script in enumerate(existing_scripts):
                 print(f"{idx + 1}. ID: {script['id']}, Path: {script['path']}, Last Updated: {script['timestamp']}")
 
-            choice = input("Enter the number of the script to reuse, or 'n' for a new script: ")
-            if choice.lower() != 'n':
+            choice = input("Enter the number of the script to reuse, or 'n' for a new script [default: n]: ")
+            if choice and choice.lower() != 'n' :
                 script_id = existing_scripts[int(choice) - 1]['id']
                 script_obj = storage.get_script_by_id(script_id)
+            elif not choice or choice.lower() == 'n':
+                js_file_path = input("Enter the path to the JavaScript file: ")
+                script_obj = Script(js_file_path)
 
         parameters = select_parameters(script_obj.config)
 
-        num_games = input("Enter the simulation size (number of games) [default: 1000]: ")
-        num_games = int(num_games) if num_games else 1000
+    num_games = input("Enter the simulation size (number of games) [default: 1000]: ")
+    num_games = int(num_games) if num_games else 1000
 
-        initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
-        initial_balance = int(float(initial_balance) * 100) if initial_balance else 1000000
-
+    initial_balance = input("Enter the initial balance in bits [default: 10000]: ")
+    initial_balance = int(float(initial_balance) * 100) if initial_balance else 1000000
 
     # Create the log file
     logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
 
+    # Generate the game result sets for the simulator
+    game_results = GameResults(required_median, num_sets, num_games)
 
-    # Check if there's an existing optimization to resume
-    existing_optimizations = storage.get_all_optimizations()
-    if existing_optimizations:
-        print("Existing optimizations found:")
-        for idx, opt in enumerate(existing_optimizations):
-            print(f"{idx + 1}. ID: {opt['id']}, Status: {opt['status']}, Last Updated: {opt['timestamp']}")
+    # Build the parameter space for the optimizer
+    parameter_names = [param[0] for param in parameters]
+    space = {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}
 
-        choice = input("Enter the number of the optimization to resume, or 'n' for a new optimization: ")
-        if choice.lower() != 'n':
-            optimization_id = existing_optimizations[int(choice) - 1]['id']
-            optimizer = Optimizer(script_obj, initial_balance, GameResults(required_median, num_sets, num_games), [param[0] for param in parameters], {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}, optimization_id=optimization_id)
-        else:
-            # Generate the game result sets for the simulator
-            game_results = GameResults(required_median, num_sets, num_games)
-
-            # Build the parameter space for the optimizer
-            parameter_names = [param[0] for param in parameters]
-            space = {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}
-            # Create the optimizer and run the optimization
-            optimizer = Optimizer(script_obj, initial_balance, GameResults(required_median, num_sets, num_games), [param[0] for param in parameters], {param[0]: {'range': param[1], 'type': param[2]} for param in parameters})
-    else:
-        # Generate the game result sets for the simulator
-        game_results = GameResults(required_median, num_sets, num_games)
-
-        # Build the parameter space for the optimizer
-        parameter_names = [param[0] for param in parameters]
-        space = {param[0]: {'range': param[1], 'type': param[2]} for param in parameters}
-        optimizer = Optimizer(script_obj, initial_balance, GameResults(required_median, num_sets, num_games), [param[0] for param in parameters], {param[0]: {'range': param[1], 'type': param[2]} for param in parameters})
+    # Create the optimizer and run the optimization
+    optimizer = Optimizer(script_obj, initial_balance, game_results, parameter_names, space, optimization_id=optimization_id if 'optimization_id' in locals() else None)
 
     # Start the optimization
     input("\nThe optimization is ready to start. Press enter to begin...")
@@ -253,5 +239,6 @@ async def main():
         print(stat)
 
     tracemalloc.stop()
+
 if __name__ == "__main__":
     asyncio.run(main())

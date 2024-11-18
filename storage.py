@@ -14,7 +14,7 @@ class Storage:
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS optimizations (
                 id TEXT PRIMARY KEY,
-                script_path TEXT,
+                script_id TEXT,
                 initial_balance INTEGER,
                 num_particles INTEGER,
                 max_iter INTEGER,
@@ -49,17 +49,49 @@ class Storage:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS parameters (
+                optimization_id TEXT,
+                parameter_name TEXT,
+                parameter_range TEXT,
+                parameter_type TEXT,
+                FOREIGN KEY (optimization_id) REFERENCES optimizations(id)
+            )
+        """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS game_sets (
+                optimization_id TEXT,
+                set_id INTEGER,
+                final_game_hash TEXT,
+                total_games INTEGER,
+                summary_metrics TEXT,
+                game_data TEXT,
+                PRIMARY KEY (optimization_id, set_id),
+                FOREIGN KEY (optimization_id) REFERENCES optimizations(id)
+            )
+        """)
         self.conn.commit()
+
+    def save_game_set(self, game_set):
+        pass
+
+    def get_game_sets(self, optimization_id):
+        pass
+
+    def get_game_set(self, set_id):
+        pass
+
+    
 
     def save_optimization(self, optimization_data):
         try:
             self.cursor.execute("""
                 INSERT OR REPLACE INTO optimizations
-                (id, script_path, initial_balance, num_particles, max_iter, c1, c2, w, damping, gbest_value, gbest_position, status, current_iteration)
+                (id, script_id, initial_balance, num_particles, max_iter, c1, c2, w, damping, gbest_value, gbest_position, status, current_iteration)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 optimization_data["optimization_id"],
-                optimization_data["script_obj"].js_file_path,
+                optimization_data["script_obj"].script_id,
                 optimization_data["initial_balance"],
                 optimization_data["num_particles"],
                 optimization_data["max_iter"],
@@ -181,7 +213,7 @@ class Storage:
                 VALUES (?, ?, ?, ?)
             """,
                 (
-                    script_obj.js_file_path,
+                    script_obj.script_id
                     script_obj.js_file_path,
                     script_obj.js_code,
                     json.dumps(script_obj.config)
@@ -227,6 +259,63 @@ class Storage:
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             return []
+
+    def save_parameters(self, optimization_id, parameters):
+        try:
+            for param in parameters:
+                self.cursor.execute("""
+                    INSERT OR REPLACE INTO parameters
+                    (optimization_id, parameter_name, parameter_range, parameter_type)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    optimization_id,
+                    param[0],
+                    json.dumps(param[1]),
+                    param[2]
+                ))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while saving parameters: {e}")
+            self.conn.rollback()
+
+    def get_parameters_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT parameter_name, parameter_range, parameter_type
+                FROM parameters
+                WHERE optimization_id = ?
+            """, (optimization_id,))
+            rows = self.cursor.fetchall()
+            return [(row['parameter_name'], json.loads(row['parameter_range']), row['parameter_type']) for row in rows]
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving parameters: {e}")
+            return []
+
+    def get_num_games_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT num_particles
+                FROM optimizations
+                WHERE id = ?
+            """, (optimization_id,))
+            row = self.cursor.fetchone()
+            return row['num_particles'] if row else None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving num_particles: {e}")
+            return None
+
+    def get_initial_balance_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT initial_balance
+                FROM optimizations
+                WHERE id = ?
+            """, (optimization_id,))
+            row = self.cursor.fetchone()
+            return row['initial_balance'] if row else None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving initial_balance: {e}")
+            return None
 
     def close(self):
         self.cursor.close()
