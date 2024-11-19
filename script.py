@@ -1,5 +1,6 @@
 import json
 import logging
+from py_mini_racer import py_mini_racer
 from typing import Tuple, Dict, Any
 
 class Script:
@@ -45,55 +46,10 @@ class Script:
         config_code = raw_js_code[start_index:end_index + 1]
         remaining_code = raw_js_code[:start_index] + raw_js_code[end_index + 1:]
 
-        # Extract the config object using string manipulation instead of eval
-        config_str = config_code[config_code.find('{'):].strip('};')
-        config_object = {}
-        
-        # Parse the config object manually
-        current_key = None
-        in_object = False
-        buffer = ""
-        
-        for line in config_str.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-                
-            if not in_object and ':' in line:
-                current_key = line.split(':')[0].strip()
-                if '{' in line:
-                    in_object = True
-                    buffer = line[line.find('{'):]
-                continue
-                
-            if in_object:
-                buffer += line
-                if '}' in line:
-                    in_object = False
-                    # Parse the object for this key
-                    obj_str = buffer.strip('{}').strip()
-                    obj = {}
-                    for pair in obj_str.split(','):
-                        if ':' in pair:
-                            k, v = pair.split(':')
-                            k = k.strip()
-                            v = v.strip()
-                            if v.startswith('"') or v.startswith("'"):
-                                v = v[1:-1]
-                            elif v == 'true':
-                                v = True
-                            elif v == 'false':
-                                v = False
-                            else:
-                                try:
-                                    v = float(v)
-                                    if v.is_integer():
-                                        v = int(v)
-                                except ValueError:
-                                    pass
-                            obj[k] = v
-                    config_object[current_key] = obj
-                    buffer = ""
+        # Evaluate the config object using py_mini_racer
+        ctx = py_mini_racer.MiniRacer()
+        ctx.eval(config_code)
+        config_object = ctx.eval('config')
 
         return config_object, remaining_code
 
