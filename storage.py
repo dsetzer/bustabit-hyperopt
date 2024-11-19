@@ -25,7 +25,7 @@ class Storage:
             CREATE TABLE IF NOT EXISTS optimizations (
                 id TEXT PRIMARY KEY,
                 script_id TEXT,
-                initial_balance REAL,
+                initial_balance INTEGER,
                 num_particles INTEGER,
                 max_iter INTEGER,
                 c1 REAL,
@@ -38,106 +38,49 @@ class Storage:
                 current_iteration INTEGER
             );
         """)
-        self.conn.commit()
-
-    def create_result_sets_table(self):
-        # Create the result sets table
         self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS result_sets (
-                id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS parameters (
                 optimization_id TEXT,
-                hash TEXT,
-                num_games INTEGER,
-                required_median REAL,
+                parameter_name TEXT,
+                parameter_range TEXT,
+                parameter_type TEXT,
                 FOREIGN KEY (optimization_id) REFERENCES optimizations(id)
-            );
+            )
         """)
-        self.conn.commit()
-
-        # Create the result set game results table
         self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS result_set_game_results (
-                result_set_id TEXT,
-                game_id INTEGER,
-                hash TEXT,
-                busted_at INTEGER,
-                duration REAL,
-                timestamp REAL,
-                PRIMARY KEY (result_set_id, game_id),
-                FOREIGN KEY (result_set_id) REFERENCES result_sets(id)
-            );
-        """)
-        self.conn.commit()
-
-    def create_scripts_table(self):
-        # Create the scripts table
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS scripts (
-                id TEXT PRIMARY KEY,
-                file_name TEXT,
-                script_config TEXT,
-                script_obj TEXT,
-                last_updated REAL
-            );
-        """)
-        self.conn.commit()
-
-    def create_optimization_result_set_links_table(self):
-        # Create the optimization-result set links table
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS optimization_result_set_links (
+            CREATE TABLE IF NOT EXISTS game_sets (
                 optimization_id TEXT,
-                result_set_id TEXT,
-                PRIMARY KEY (optimization_id, result_set_id),
-                FOREIGN KEY (optimization_id) REFERENCES optimizations(id),
-                FOREIGN KEY (result_set_id) REFERENCES result_sets(id)
-            );
-        """)
-        self.conn.commit()
-
-    def create_script_optimization_links_table(self):
-        # Create the script-optimization links table
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS script_optimization_links (
-                script_id TEXT,
-                optimization_id TEXT,
-                PRIMARY KEY (script_id, optimization_id),
-                FOREIGN KEY (script_id) REFERENCES scripts(id),
+                set_id INTEGER,
+                final_game_hash TEXT,
+                total_games INTEGER,
+                summary_metrics TEXT,
+                game_data TEXT,
+                PRIMARY KEY (optimization_id, set_id),
                 FOREIGN KEY (optimization_id) REFERENCES optimizations(id)
-            );
+            )
         """)
         self.conn.commit()
 
-    # Optimization data management
-    def insert_optimization(self, optimization_data):
-        """
-        Insert an optimization into the optimizations table.
+    def save_game_set(self, game_set):
+        pass
 
-        optimization_data: A dictionary containing the fields for the optimization to insert.
-            - id: The ID of the optimization.
-            - script_id: The ID of the script associated with the optimization.
-            - initial_balance: The initial balance of the optimization.
-            - num_particles: The number of particles in the optimization.
-            - max_iter: The maximum number of iterations for the optimization.
-            - c1: The cognitive weight for the optimization.
-            - c2: The social weight for the optimization.
-            - w: The inertia weight for the optimization.
-            - damping: The damping factor for the optimization.
-            - gbest_value: The current global best value for the optimization.
-            - gbest_position: A list of the current global best position for the optimization.
-            - status: The status of the optimization.
-            - current_iteration: The current iteration of the optimization.
+    def get_game_sets(self, optimization_id):
+        pass
 
-        Returns the ID of the inserted optimization if successful, None otherwise.
-        """
+    def get_game_set(self, set_id):
+        pass
+
+    
+
+    def save_optimization(self, optimization_data):
         try:
             self.cursor.execute("""
-                INSERT INTO optimizations
+                INSERT OR REPLACE INTO optimizations
                 (id, script_id, initial_balance, num_particles, max_iter, c1, c2, w, damping, gbest_value, gbest_position, status, current_iteration)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                optimization_data["id"],
-                optimization_data["script_id"],
+                optimization_data["optimization_id"],
+                optimization_data["script_obj"].script_id,
                 optimization_data["initial_balance"],
                 optimization_data["num_particles"],
                 optimization_data["max_iter"],
@@ -448,9 +391,32 @@ class Storage:
             logging.error(f"An error occurred: {e}")
             self.conn.rollback()
 
-    def link_script_to_optimization(self, script_id, optimization_id):
-        """
-        Link a script to an optimization.
+    def save_script(self, script_obj):
+        if not script_obj:
+            raise ValueError("Script object is null")
+
+        try:
+            self.cursor.execute("""
+                INSERT OR REPLACE INTO scripts
+                (id, file_path, content, config)
+                VALUES (?, ?, ?, ?)
+            """, (
+                    script_obj.script_id,
+                    script_obj.js_file_path,
+                    script_obj.js_code,
+                    json.dumps(script_obj.config)
+            ))
+            self.conn.commit()
+            return script_obj.js_file_path
+        except TypeError as e:
+            if "not JSON serializable" in str(e):
+                raise ValueError(f"Script config is not JSON serializable: {e}")
+            else:
+                raise e
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while saving script: {e}")
+            self.conn.rollback()
+            return None
 
         script_id: The ID of the script.
         optimization_id: The ID of the optimization.
@@ -521,6 +487,63 @@ class Storage:
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             return []
+
+    def save_parameters(self, optimization_id, parameters):
+        try:
+            for param in parameters:
+                self.cursor.execute("""
+                    INSERT OR REPLACE INTO parameters
+                    (optimization_id, parameter_name, parameter_range, parameter_type)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    optimization_id,
+                    param[0],
+                    json.dumps(param[1]),
+                    param[2]
+                ))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while saving parameters: {e}")
+            self.conn.rollback()
+
+    def get_parameters_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT parameter_name, parameter_range, parameter_type
+                FROM parameters
+                WHERE optimization_id = ?
+            """, (optimization_id,))
+            rows = self.cursor.fetchall()
+            return [(row['parameter_name'], json.loads(row['parameter_range']), row['parameter_type']) for row in rows]
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving parameters: {e}")
+            return []
+
+    def get_num_games_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT num_particles
+                FROM optimizations
+                WHERE id = ?
+            """, (optimization_id,))
+            row = self.cursor.fetchone()
+            return row['num_particles'] if row else None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving num_particles: {e}")
+            return None
+
+    def get_initial_balance_by_optimization_id(self, optimization_id):
+        try:
+            self.cursor.execute("""
+                SELECT initial_balance
+                FROM optimizations
+                WHERE id = ?
+            """, (optimization_id,))
+            row = self.cursor.fetchone()
+            return row['initial_balance'] if row else None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while retrieving initial_balance: {e}")
+            return None
 
     def close(self):
         # Close the database connection

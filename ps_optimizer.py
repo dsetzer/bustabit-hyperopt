@@ -10,7 +10,6 @@ from math import exp, log
 from simulator import Simulator
 from storage import Storage
 
-
 class Particle:
     def __init__(self, position, velocity):
         self.position = np.array(list(position.values()))
@@ -20,7 +19,7 @@ class Particle:
         self.id = id(self)  # Add an id attribute
 
     def __repr__(self):
-        return f"Particle(ID: {self.id}, Position: {self.position}, Velocity: {self.velocity}, PBest: {self.pbest_position}, PBest Value: {self.pbest_value})"
+        return f"Particle(Position: {self.position}, Velocity: {self.velocity}, PBest: {self.pbest_position}, PBest Value: {self.pbest_value})"
 
 class PSOptimizer:
     def __init__(self, script_obj, initial_balance, game_results, parameter_names, space, optimization_id=None):
@@ -178,15 +177,14 @@ class PSOptimizer:
 
     async def evaluate_fitness(self, particle_position):
         try:
-            decoded_particle = dict(zip(self.parameter_names, self.enforce_constraints(particle_position)))
-            sim_result = await self.simulator.run_multi_simulation(self.initial_balance, self.game_results, decoded_particle)
-            fitness = sim_result[0].get_metric()
-
-            if not math.isfinite(fitness):
-                logging.warning(f"Non-finite fitness value: {fitness}. Setting to infinity.")
+            decoded_particle = self.enforce_constraints(particle)
+            sim_result = await self.simulator.run(self.initial_balance, self.game_results, decoded_particle)
+            if sim_result[1] == "SCRIPT_ERROR":
                 fitness = float('inf')
-
-            logging.info(f"Particle: {decoded_particle}, Fitness: {fitness}")
+            elif sim_result[1] == "INSUFFICIENT_BALANCE":
+                fitness = float('inf')
+            else:
+                fitness = sim_result[0].get_metric()
         except Exception as e:
             logging.error(f"Error evaluating fitness for particle: {e}")
             fitness = float('inf')
