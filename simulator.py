@@ -6,6 +6,7 @@ import math
 import random
 from statistics import median
 from typing import List, Dict, Any, Tuple
+from py_mini_racer import py_mini_racer
 
 import pythonmonkey as pm
 from engine import Engine, UserInfo
@@ -56,6 +57,7 @@ class Simulator:
         self.script = script
         self.shouldStop = False
         self.shouldStopReason = None
+        self.ctx = py_mini_racer.MiniRacer()
 
     async def run_single_simulation(self, initial_balance: float, game_set: List[Dict[str, Any]], script_params: Dict[str, Any]) -> Tuple[Statistics, Any]:
         user_info = UserInfo("Player", initial_balance)
@@ -68,17 +70,32 @@ class Simulator:
             if engine.next is not None:
                 engine.next = None
 
-        globals_dict = {
-            'engine': engine,
-            'userInfo': user_info,
-            'stop': stop,
-            'log': lambda *msgs: None,  # Discard log messages
-            'SHA256': lambda x: hashlib.sha256(x.encode()).hexdigest(),
-            'gameResultFromHash': lambda game_hash: GameResults.generate_games(game_hash, 1)[0],
-        }
+        # Create a new context for each simulation
+        self.ctx = py_mini_racer.MiniRacer()
+        
+        # Set up the globals directly in the context
+        self.ctx.eval("""
+            var engine = arguments[0];
+            var userInfo = arguments[1];
+            var stop = arguments[2];
+            var log = arguments[3];
+            var SHA256 = arguments[4];
+            var gameResultFromHash = arguments[5];
+        """)
+
+        globals_dict = [
+            engine,
+            user_info,
+            stop,
+            lambda *msgs: None,  # Discard log messages
+            lambda x: hashlib.sha256(x.encode()).hexdigest(),
+            lambda game_hash: GameResults.generate_games(game_hash, 1)[0],
+        ]
 
         try:
-            self.script.evaluate(globals_dict, script_params)
+            # Evaluate the script directly
+            self.ctx.eval(self.script.merge_config())
+            self.ctx.call("eval", self.script.js_code, *globals_dict)
         except Exception as e:
             return ("SCRIPT_ERROR", None, f"SCRIPT_ERROR: {str(e)}")
 
@@ -124,7 +141,7 @@ class Simulator:
                     return ("INSUFFICIENT_BALANCE", None)
 
             # Aggregate the statistics of the valid results
-            aggregated_statistics = [result[0] for result in valid_results if result[0].balance != 0]
+            aggregated_statistics = [result[1] for result in valid_results if result[1].balance != 0]
 
             # If there are no valid results with a balance, return an error
             if not aggregated_statistics:

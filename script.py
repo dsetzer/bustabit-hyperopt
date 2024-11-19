@@ -1,6 +1,5 @@
 import json
 import logging
-import pythonmonkey as pm
 from typing import Tuple, Dict, Any
 
 class Script:
@@ -46,15 +45,61 @@ class Script:
         config_code = raw_js_code[start_index:end_index + 1]
         remaining_code = raw_js_code[:start_index] + raw_js_code[end_index + 1:]
 
-        # Evaluate the config object
-        pm.eval(config_code)
-        config_object = pm.globalThis.config
+        # Extract the config object using string manipulation instead of eval
+        config_str = config_code[config_code.find('{'):].strip('};')
+        config_object = {}
+        
+        # Parse the config object manually
+        current_key = None
+        in_object = False
+        buffer = ""
+        
+        for line in config_str.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            if not in_object and ':' in line:
+                current_key = line.split(':')[0].strip()
+                if '{' in line:
+                    in_object = True
+                    buffer = line[line.find('{'):]
+                continue
+                
+            if in_object:
+                buffer += line
+                if '}' in line:
+                    in_object = False
+                    # Parse the object for this key
+                    obj_str = buffer.strip('{}').strip()
+                    obj = {}
+                    for pair in obj_str.split(','):
+                        if ':' in pair:
+                            k, v = pair.split(':')
+                            k = k.strip()
+                            v = v.strip()
+                            if v.startswith('"') or v.startswith("'"):
+                                v = v[1:-1]
+                            elif v == 'true':
+                                v = True
+                            elif v == 'false':
+                                v = False
+                            else:
+                                try:
+                                    v = float(v)
+                                    if v.is_integer():
+                                        v = int(v)
+                                except ValueError:
+                                    pass
+                            obj[k] = v
+                    config_object[current_key] = obj
+                    buffer = ""
 
         return config_object, remaining_code
 
     def deep_copy_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Creates a deep copy of the config object that works with pythonmonkey's JavaScript objects
+        Creates a deep copy of the config object
 
         :param config: The config object to copy
         :return: A deep copy of the config object
@@ -86,24 +131,3 @@ class Script:
         """
         config_code = f"var config = {json.dumps(self.config)};\n"
         return config_code + self.js_code
-
-    def evaluate(self, globals_dict: Dict[str, Any], script_params: Dict[str, Any]) -> Any:
-        context = f"""
-        (function createContext(context) {{
-            const {', '.join(globals_dict.keys())} = context;
-    
-            {self.merge_config()}
-    
-            // Expose only what we want from the script
-            return {{
-                onGameStarting: typeof onGameStarting !== 'undefined' ? onGameStarting : null,
-                onGameStarted: typeof onGameStarted !== 'undefined' ? onGameStarted : null,
-                onGameEnded: typeof onGameEnded !== 'undefined' ? onGameEnded : null,
-            }};
-        }})
-        """
-        context_function = pm.eval(context)
-        if not context_function:
-            raise ValueError("Context function is null")
-    
-        return context_function(globals_dict)
