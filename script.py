@@ -28,20 +28,21 @@ class Script:
             js_code = file.read()
         return js_code
 
-    def object_to_dict(self, js_obj: V8.JSObject):
+    def object_to_dict(self, js_obj):
         """Converts a JSObject to a Python dictionary
 
         :param js_obj: The JSObject to convert
         :return: A Python dictionary with the same keys and values as the JSObject
         """
         python_dict = {}
-        for key in js_obj.keys():
+        for key in js_obj:
             value = js_obj[key]
             if isinstance(value, V8.JSObject):
                 python_dict[key] = self.object_to_dict(value)
             else:
                 python_dict[key] = value
         return python_dict
+
 
     def dict_to_object(self, py_dict: dict):
         """Converts a Python dictionary to a JavaScript object string
@@ -88,7 +89,7 @@ class Script:
         with V8.JSContext() as ctxt:
             ctxt.eval(config_code)
             config_object = ctxt.eval("config")
-            config = self.object_to_dict(config_object)
+        config = self.object_to_dict(config_object)
 
         return config, remaining_code
 

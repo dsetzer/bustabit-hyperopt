@@ -30,7 +30,7 @@ class History:
         return list(self.data)
 
 
-class Engine(STPyV8.JSClass):
+class Engine:
     def __init__(self, user_info):
         self._callback_event = asyncio.Event()
         self._callback_counter = 0
