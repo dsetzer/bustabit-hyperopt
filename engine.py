@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from collections import deque
-import STPyV8
 
 logging.basicConfig(level=logging.DEBUG)
 

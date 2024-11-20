@@ -1,4 +1,4 @@
 numpy
 prettytable
 scikit_optimize
-py-mini-racer
+mini-racer

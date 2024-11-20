@@ -1,26 +1,16 @@
+import sqlite3
 import json
 import logging
-import sqlite3
-
 
 class Storage:
     def __init__(self, db_path):
-        # Initialize the database connection
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.create_tables()
 
     def create_tables(self):
-        # Create the necessary tables
-        self.create_optimizations_table()
-        self.create_result_sets_table()
-        self.create_scripts_table()
-        self.create_optimization_result_set_links_table()
-        self.create_script_optimization_links_table()
-
-    def create_optimizations_table(self):
-        # Create the optimizations table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS optimizations (
                 id TEXT PRIMARY KEY,
@@ -35,8 +25,29 @@ class Storage:
                 gbest_value REAL,
                 gbest_position TEXT,
                 status TEXT,
-                current_iteration INTEGER
-            );
+                current_iteration INTEGER,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS iteration_states (
+                optimization_id TEXT,
+                iteration INTEGER,
+                particles TEXT,
+                gbest_position TEXT,
+                gbest_value REAL,
+                PRIMARY KEY (optimization_id, iteration),
+                FOREIGN KEY (optimization_id) REFERENCES optimizations(id)
+            )
+        """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scripts (
+                id TEXT PRIMARY KEY,
+                file_path TEXT,
+                content TEXT,
+                config TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
         """)
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS parameters (
@@ -94,20 +105,22 @@ class Storage:
                 optimization_data["current_iteration"],
             ))
             self.conn.commit()
-            return optimization_data["id"]
+            return optimization_data["optimization_id"]
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             self.conn.rollback()
             return None
 
-    def get_optimization(self, optimization_id):
-        """
-        Retrieve an optimization from the database.
+    def optimization_exists(self, optimization_id):
+        try:
+            self.cursor.execute("SELECT COUNT(*) FROM optimizations WHERE id = ?", (optimization_id,))
+            count = self.cursor.fetchone()[0]
+            return count > 0
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred: {e}")
+            return False
 
-        optimization_id: The ID of the optimization to retrieve.
-
-        Returns the optimization as a dictionary if it exists, None otherwise.
-        """
+    def load_optimization(self, optimization_id):
         try:
             self.cursor.execute("SELECT * FROM optimizations WHERE id = ?", (optimization_id,))
             row = self.cursor.fetchone()
@@ -120,283 +133,81 @@ class Storage:
             logging.error(f"An error occurred: {e}")
             return None
 
-    def update_optimization(self, optimization_id, optimization_data):
-        """
-        Update the optimization with the given optimization_id using the given optimization_data.
-
-        optimization_id: The ID of the optimization to update.
-        optimization_data: A dictionary containing the fields to update in the optimization.
-
-        Returns the optimization_id if the update was successful, None otherwise.
-        """
+    def update_optimization(self, optimization_id, update_data):
         try:
-            update_fields = ", ".join([f"{k} = ?" for k in optimization_data.keys()])
+            update_fields = ", ".join([f"{k} = ?" for k in update_data.keys()])
             query = f"UPDATE optimizations SET {update_fields} WHERE id = ?"
-            values = list(optimization_data.values()) + [optimization_id]
-            if "gbest_position" in optimization_data:
-                values[values.index(optimization_data["gbest_position"])] = json.dumps(optimization_data["gbest_position"])
+            values = list(update_data.values()) + [optimization_id]
             self.cursor.execute(query, values)
             self.conn.commit()
-            return optimization_id
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             self.conn.rollback()
-            return None
 
-    def delete_optimization(self, optimization_id):
+    def save_iteration_state(self, optimization_id, iteration_data):
         try:
-            self.cursor.execute("DELETE FROM optimizations WHERE id = ?", (optimization_id,))
+            self.cursor.execute("""
+                INSERT OR REPLACE INTO iteration_states
+                (optimization_id, iteration, particles, gbest_position, gbest_value)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                optimization_id,
+                iteration_data["iteration"],
+                json.dumps(iteration_data["particles"]),
+                json.dumps(iteration_data["gbest_position"]),
+                iteration_data["gbest_value"],
+            ))
             self.conn.commit()
-            return optimization_id
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             self.conn.rollback()
+
+    def load_iteration_state(self, optimization_id, iteration):
+        try:
+            self.cursor.execute("""
+                SELECT * FROM iteration_states
+                WHERE optimization_id = ? AND iteration = ?
+            """, (optimization_id, iteration))
+            row = self.cursor.fetchone()
+            if row:
+                iteration_data = dict(row)
+                iteration_data["particles"] = json.loads(iteration_data["particles"])
+                iteration_data["gbest_position"] = json.loads(iteration_data["gbest_position"])
+                return iteration_data
+            return None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred: {e}")
             return None
 
     def get_all_optimizations(self):
         try:
-            self.cursor.execute("SELECT * FROM optimizations")
+            self.cursor.execute(
+                "SELECT id, status, current_iteration, timestamp FROM optimizations ORDER BY timestamp DESC"
+            )
             rows = self.cursor.fetchall()
-            optimizations = []
-            for row in rows:
-                optimization_data = dict(row)
-                optimization_data["gbest_position"] = json.loads(optimization_data["gbest_position"])
-                optimizations.append(optimization_data)
-            return optimizations
+            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             return []
 
-    # Result set management
-    def insert_result_set(self, result_set_data, game_results):
+    def delete_optimization(self, optimization_id):
         try:
-            self.cursor.execute("""
-                INSERT INTO result_sets
-                (id, optimization_id, hash, num_games, required_median)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                result_set_data["id"],
-                result_set_data["optimization_id"],
-                result_set_data["hash"],
-                result_set_data["num_games"],
-                result_set_data["required_median"],
-            ))
-            self.conn.commit()
-
-            for game_result in game_results:
-                self.cursor.execute("""
-                    INSERT INTO result_set_game_results
-                    (result_set_id, game_id, hash, busted_at, duration, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    result_set_data["id"],
-                    game_result["game_id"],
-                    game_result["hash"],
-                    game_result["busted_at"],
-                    game_result["duration"],
-                    game_result["timestamp"],
-                ))
-            self.conn.commit()
-            return result_set_data["id"]
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def get_result_set(self, result_set_id):
-        try:
-            self.cursor.execute("SELECT * FROM result_sets WHERE id = ?", (result_set_id,))
-            row = self.cursor.fetchone()
-            if row:
-                result_set_data = dict(row)
-                self.cursor.execute("SELECT * FROM result_set_game_results WHERE result_set_id = ?", (result_set_id,))
-                game_results = [dict(game_row) for game_row in self.cursor.fetchall()]
-                result_set_data["game_results"] = game_results
-                return result_set_data
-            return None
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            return None
-
-    def update_result_set(self, result_set_id, result_set_data):
-        try:
-            update_fields = []
-            values = []
-            for key, value in result_set_data.items():
-                update_fields.append(f"{key} = ?")
-                values.append(value)
-            update_fields = ", ".join(update_fields)
-            query = f"UPDATE result_sets SET {update_fields} WHERE id = ?"
-            values += [result_set_id]
-            self.cursor.execute(query, values)
-            self.conn.commit()
-            return result_set_id
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def delete_result_set(self, result_set_id):
-        try:
-            self.cursor.execute("DELETE FROM result_set_game_results WHERE result_set_id = ?", (result_set_id,))
-            self.cursor.execute("DELETE FROM result_sets WHERE id = ?", (result_set_id,))
-            self.conn.commit()
-            return result_set_id
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def get_all_result_sets(self, optimization_id):
-        try:
-            self.cursor.execute("SELECT * FROM result_sets WHERE optimization_id = ?", (optimization_id,))
-            rows = self.cursor.fetchall()
-            result_sets = []
-            for row in rows:
-                result_set_data = dict(row)
-                self.cursor.execute("SELECT * FROM result_set_game_results WHERE result_set_id = ?", (result_set_data["id"],))
-                game_results = [dict(game_row) for game_row in self.cursor.fetchall()]
-                result_set_data["game_results"] = game_results
-                result_sets.append(result_set_data)
-            return result_sets
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            return []
-
-    # Script data management
-    def insert_script(self, script_data):
-        try:
-            self.cursor.execute("""
-                INSERT INTO scripts
-                (id, file_name,script_config, script_obj, last_updated)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                script_data["id"],
-                script_data["file_name"],
-                json.dumps(script_data["script_config"]),
-                json.dumps(script_data["script_obj"]),
-                script_data["last_updated"],
-            ))
-            self.conn.commit()
-            return script_data["id"]
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def get_script(self, script_id):
-        """
-        Retrieve a script from the database.
-
-        script_id: The ID of the script to retrieve.
-
-        Returns the script as a dictionary if it exists, None otherwise.
-        """
-        try:
-            self.cursor.execute("SELECT * FROM scripts WHERE id = ?", (script_id,))
-            row = self.cursor.fetchone()
-            if row:
-                script_data = dict(row)
-                script_data["script_config"] = json.loads(script_data["script_config"])
-                script_data["script_obj"] = json.loads(script_data["script_obj"])
-                return script_data
-            return None
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            return None
-
-    def update_script(self, script_id, script_data):
-        """
-        Update an existing script in the database.
-
-        script_id: The ID of the script to update.
-        script_data: A dictionary containing the id, file_name, script_config, script_obj, and last_updated to update.
-
-        Returns the script_id if the update was successful, None otherwise.
-        """
-        try:
-            self.cursor.execute("""
-                UPDATE scripts
-                SET file_name = ?, script_config = ?, script_obj = ?, last_updated = ?
-                WHERE id = ?
-            """, (
-                script_data["file_name"],
-                json.dumps(script_data["script_config"]),
-                json.dumps(script_data["script_obj"]),
-                script_data["last_updated"],
-                script_id,
-            ))
-            self.conn.commit()
-            return script_id
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def delete_script(self, script_id):
-        """
-        Delete a script from the database.
-
-        Returns the script_id if the deletion was successful, None otherwise.
-        """
-        try:
-            self.cursor.execute("DELETE FROM scripts WHERE id = ?", (script_id,))
-            self.conn.commit()
-            return script_id
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            self.conn.rollback()
-            return None
-
-    def get_all_scripts(self):
-        """
-        Retrieve all scripts from the database.
-
-        Returns a list of dictionaries, each containing the id file_name, last_updated date, and config parameter names of each script.
-        If an error occurs, returns an empty list.
-        """
-        try:
-            self.cursor.execute("""
-                SELECT s.id, s.file_name, s.last_updated
-                , (SELECT json_group_array(key) FROM json_each(s.script_config)) AS config_params
-                FROM scripts s
-            """)
-            rows = self.cursor.fetchall()
-            scripts = []
-            for row in rows:
-                scripts.append(dict(row))
-            return scripts
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            return []
-
-    # Relationships between data
-    def link_optimization_to_result_set(self, optimization_id, result_set_id):
-        """
-        Link an optimization to a result set.
-
-        optimization_id: The ID of the optimization to link.
-        result_set_id: The ID of the result set to link to the optimization.
-
-        Returns None if the link was successful, otherwise an error message.
-        """
-        try:
-            self.cursor.execute("""
-                INSERT INTO optimization_result_set_links
-                (optimization_id, result_set_id)
-                VALUES (?, ?)
-            """, (optimization_id, result_set_id))
+            self.cursor.execute(
+                "DELETE FROM iteration_states WHERE optimization_id = ?",
+                (optimization_id,),
+            )
+            self.cursor.execute(
+                "DELETE FROM optimizations WHERE id = ?", (optimization_id,)
+            )
             self.conn.commit()
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             self.conn.rollback()
 
     def save_script(self, script_obj):
-        if not script_obj:
-            raise ValueError("Script object is null")
-
         try:
-            self.cursor.execute("""
+            self.cursor.execute(
+                """
                 INSERT OR REPLACE INTO scripts
                 (id, file_path, content, config)
                 VALUES (?, ?, ?, ?)
@@ -408,82 +219,41 @@ class Storage:
             ))
             self.conn.commit()
             return script_obj.js_file_path
-        except TypeError as e:
-            if "not JSON serializable" in str(e):
-                raise ValueError(f"Script config is not JSON serializable: {e}")
-            else:
-                raise e
         except sqlite3.Error as e:
             logging.error(f"An error occurred while saving script: {e}")
             self.conn.rollback()
             return None
 
-        script_id: The ID of the script.
-        optimization_id: The ID of the optimization.
-
-        Returns None if the link was successful, otherwise an error message.
-        """
+    def load_script(self, script_id):
         try:
-            self.cursor.execute("""
-                INSERT INTO script_optimization_links
-                (script_id, optimization_id)
-                VALUES (?, ?)
-            """, (script_id, optimization_id))
+            self.cursor.execute(
+                "SELECT * FROM scripts WHERE id = ?", (script_id,)
+            )
+            row = self.cursor.fetchone()
+            if row:
+                script_data = dict(row)
+                script_data['config'] = json.loads(script_data['config'])
+                return script_data
+            return None
+        except sqlite3.Error as e:
+            logging.error(f"An error occurred while loading script: {e}")
+            return None
+
+    def delete_script(self, script_id):
+        try:
+            self.cursor.execute(
+                "DELETE FROM scripts WHERE id = ?", (script_id,)
+            )
             self.conn.commit()
         except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
+            logging.error(f"An error occurred while deleting script: {e}")
             self.conn.rollback()
 
-    def get_optimizations_for_script(self, script_id):
-        """
-        Retrieve all optimizations that are linked to the given script.
-
-        :param script_id: The ID of the script to retrieve optimizations for.
-        :return: A list of optimization data, where each item is a dictionary containing the optimization's ID,
-            script object, initial balance, number of particles, maximum number of iterations, c1 and c2 values,
-            weight, damping, global best value, global best position, status, and current iteration.
-        """
+    def get_all_scripts(self):
         try:
-            self.cursor.execute("""
-                SELECT o.id, o.script_obj, o.initial_balance, o.num_particles, o.max_iter, o.c1, o.c2, o.w, o.damping, o.gbest_value, o.gbest_position, o.status, o.current_iteration
-                FROM optimizations o
-                INNER JOIN script_optimization_links l ON o.id = l.optimization_id
-                WHERE l.script_id = ?
-            """, (script_id,))
+            self.cursor.execute("SELECT id, file_path, timestamp FROM scripts ORDER BY timestamp DESC")
             rows = self.cursor.fetchall()
-            optimizations = []
-            for row in rows:
-                optimization_data = dict(row)
-                optimization_data["gbest_position"] = json.loads(optimization_data["gbest_position"])
-                optimizations.append(optimization_data)
-            return optimizations
-        except sqlite3.Error as e:
-            logging.error(f"An error occurred: {e}")
-            return []
-
-    def get_result_sets_for_optimization(self, optimization_id):
-        """
-        Retrieve all result sets for a given optimization.
-
-        optimization_id: The ID of the optimization to retrieve result sets for.
-
-        Returns a list of dictionaries, each containing the id, hash, num_games, and required_median
-        of a result set linked to the given optimization. If no result sets are found, returns an empty
-        list.
-        """
-        try:
-            self.cursor.execute("""
-                SELECT r.id, r.hash, r.num_games, r.required_median
-                FROM result_sets r
-                INNER JOIN optimization_result_set_links l ON r.id = l.result_set_id
-                WHERE l.optimization_id = ?
-            """, (optimization_id,))
-            rows = self.cursor.fetchall()
-            result_sets = []
-            for row in rows:
-                result_set_data = dict(row)
-                result_sets.append(result_set_data)
-            return result_sets
+            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             logging.error(f"An error occurred: {e}")
             return []
@@ -546,5 +316,5 @@ class Storage:
             return None
 
     def close(self):
-        # Close the database connection
+        self.cursor.close()
         self.conn.close()

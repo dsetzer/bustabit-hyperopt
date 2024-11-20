@@ -12,6 +12,7 @@ from ps_optimizer import PSOptimizer as Optimizer
 import gc
 import tracemalloc
 
+tracemalloc.start()
 np.int = np.int64 # Fix for a bug in skopt
 
 def get_default_range(param_type, default_value):
@@ -128,23 +129,11 @@ def select_parameters(config):
     return parameters
 
 async def main():
-    # enable garbage collection and memory profiling
-    gc.enable()
-    tracemalloc.start()
-
-    # Create the log file
-    logging.basicConfig(filename=f"logs/{hashlib.md5(script_obj.js_file_path.encode()).hexdigest()}.log", level=logging.INFO)
-
-    # get parameters
     parser = argparse.ArgumentParser(description='Optimize parameters in a JS script.')
     parser.add_argument('--script', help='Path to the JavaScript file.')
     parser.add_argument('--params', help='Parameters to optimize.')
     parser.add_argument('--games', type=int, default=1000, help='Number of games to simulate. Defaults to 1000.')
     parser.add_argument('--balance', type=float, default=10000, help='Initial balance in bits. Defaults to 10000 bits.')
-    parser.add_argument('--sets', type=int, default=3, help='Number of redundant result sets to use. Defaults to 3.')
-    # parser.add_argument('--resume', type=int, default=0, help='Resume optimization from a specific iteration. Defaults to 0.')
-
-    # parse arguments
     args = parser.parse_args()
 
     required_median = 1.98
@@ -155,11 +144,7 @@ async def main():
     parameters = None
 
 
-    num_sets = args.sets
-
-    # initialize storage
     storage = Storage('optimizations.db')
-    script_obj = None
 
     if args.script and args.params:
         js_file_path = args.script
@@ -183,11 +168,14 @@ async def main():
                 max_value = float(value_ranges[2])
                 parameters.append((param_name, (min_value, max_value), param_type))
     else:
+        js_file_path = input("Enter the path to the JavaScript file: ")
+        script_obj = Script(js_file_path)
+
         existing_scripts = storage.get_all_scripts()
         if existing_scripts:
             print("Existing scripts found:")
             for idx, script in enumerate(existing_scripts):
-                print(f"{idx + 1}. ID: {script['id']}, Filename: {script['file_name']}, Config Parameters: {', '.join(script['config_params'])}, Last Updated: {script['last_updated']}")
+                print(f"{idx + 1}. ID: {script['id']}, Path: {script['path']}, Last Updated: {script['timestamp']}")
 
             choice = input("Enter the number of the script to reuse, or 'n' for a new script [default: n]: ")
             if choice and choice.lower() != 'n' :

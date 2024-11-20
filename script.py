@@ -1,6 +1,6 @@
 import json
 import logging
-from py_mini_racer import py_mini_racer
+from py_mini_racer import MiniRacer
 from typing import Tuple, Dict, Any
 
 class Script:
@@ -47,7 +47,7 @@ class Script:
         remaining_code = raw_js_code[:start_index] + raw_js_code[end_index + 1:]
 
         # Evaluate the config object using py_mini_racer
-        ctx = py_mini_racer.MiniRacer()
+        ctx = MiniRacer()
         ctx.eval(config_code)
         config_object = ctx.eval('config')
 

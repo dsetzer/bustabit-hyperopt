@@ -6,9 +6,8 @@ import math
 import random
 from statistics import median
 from typing import List, Dict, Any, Tuple
-from py_mini_racer import py_mini_racer
+from py_mini_racer import MiniRacer
 
-import pythonmonkey as pm
 from engine import Engine, UserInfo
 from metrics import Statistics
 from script import Script
