@@ -56,60 +56,74 @@ class Simulator:
         self.script = script
         self.shouldStop = False
         self.shouldStopReason = None
-        self.ctx = py_mini_racer.MiniRacer()
 
-    async def run_single_simulation(self, initial_balance: float, game_set: List[Dict[str, Any]], script_params: Dict[str, Any]) -> Tuple[Statistics, Any]:
+    def __del__(self):
+        """Cleanup when simulator is destroyed"""
+        pass
+
+    async def run_single_simulation(self, initial_balance: float, game_set: List[Dict[str, Any]], script_params: Dict[str, Any]) -> Tuple[str, Any, str]:
         user_info = UserInfo("Player", initial_balance)
-        engine = Engine(user_info)
-        statistics = Statistics(initial_balance)
-
-        def stop(reason: str):
-            self.shouldStop = True
-            engine.stopping = True
-            if engine.next is not None:
-                engine.next = None
-
-        # Create a new context for each simulation
-        self.ctx = py_mini_racer.MiniRacer()
         
-        # Set up the globals directly in the context
-        self.ctx.eval("""
-            var engine = arguments[0];
-            var userInfo = arguments[1];
-            var stop = arguments[2];
-            var log = arguments[3];
-            var SHA256 = arguments[4];
-            var gameResultFromHash = arguments[5];
-        """)
-
-        globals_dict = [
-            engine,
-            user_info,
-            stop,
-            lambda *msgs: None,  # Discard log messages
-            lambda x: hashlib.sha256(x.encode()).hexdigest(),
-            lambda game_hash: GameResults.generate_games(game_hash, 1)[0],
-        ]
-
+        # Create a new context for this specific simulation
+        ctx = MiniRacer()
         try:
-            # Evaluate the script directly
-            self.ctx.eval(self.script.merge_config())
-            self.ctx.call("eval", self.script.js_code, *globals_dict)
+            # Create engine with context
+            engine = Engine(user_info, ctx)
+            statistics = Statistics(initial_balance)
+
+            def stop(reason: str):
+                self.shouldStop = True
+                engine.stopping = True
+                if engine.next is not None:
+                    engine.next = None
+
+            def SHA256(text: str):
+                return hashlib.sha256(text.encode()).hexdigest()
+
+            def gameResultFromHash(game_hash: str):
+                return GameResults.generate_games(game_hash, 1)[0]
+
+            # Set up the globals
+            ctx.eval("var global = this;")  # Ensure we have a global object
+            ctx.eval("var engine = arguments[0];")
+            ctx.eval("var userInfo = arguments[1];")
+            ctx.eval("var stop = arguments[2];")
+            ctx.eval("var log = arguments[3];")
+            ctx.eval("var SHA256 = arguments[4];")
+            ctx.eval("var gameResultFromHash = arguments[5];")
+            ctx.eval("var config = arguments[6];")
+
+            # Pass all the globals at once
+            globals_dict = [
+                engine,
+                user_info,
+                stop,
+                lambda *msgs: None,  # Discard log messages
+                SHA256,  # Use the local function
+                gameResultFromHash,  # Use the local function
+                self.script.get_config(script_params)
+            ]
+
+            # Evaluate the script with all globals
+            ctx.eval(self.script.js_code, *globals_dict)
+
+            try:
+                for game in game_set:
+                    await engine._nextGame(game)
+                    statistics.update(engine)
+                    if self.shouldStop:
+                        break
+                    if statistics.balance <= 0:
+                        return ("INSUFFICIENT_BALANCE", None, "INSUFFICIENT_BALANCE")
+            except Exception as e:
+                return ("SIMULATION_ERROR", None, f"SIMULATION_ERROR: {str(e)}")
+
+            return ("OK", statistics, None)
+
         except Exception as e:
             return ("SCRIPT_ERROR", None, f"SCRIPT_ERROR: {str(e)}")
-
-        try:
-            for game in game_set:
-                await engine._nextGame(game)
-                statistics.update(engine)
-                if self.shouldStop:
-                    break
-                if statistics.balance <= 0:
-                    return ("INSUFFICIENT_BALANCE", None, "INSUFFICIENT_BALANCE")
-        except Exception as e:
-            return ("SIMULATION_ERROR", None, f"SIMULATION_ERROR: {str(e)}")
-
-        return ("OK", statistics)
+        finally:
+            del ctx
 
     async def run(self, initial_balance: float, game_results: GameResults, script_params: Dict[str, Any]) -> Tuple[str, Any]:
         """Runs multiple simulations and aggregates the results.
@@ -123,21 +137,20 @@ class Simulator:
             A tuple containing the result of the simulation and the aggregated statistics.
         """
         try:
-            # tracemalloc.start()
-            # snapshot0 = tracemalloc.take_snapshot()
-
             self.shouldStop = False
             self.shouldStopReason = None
+
             # Run multiple simulations in parallel
-            tasks = [self.run_single_simulation(initial_balance, game_set, script_params) for game_set in game_results.result_sets]
+            tasks = [self.run_single_simulation(initial_balance, game_set, script_params) 
+                    for game_set in game_results.result_sets]
             results = await asyncio.gather(*tasks)
 
             # Filter out invalid results
-            valid_results = [result for result in results if result[0] != "SCRIPT_ERROR" and result[0] != "INSUFFICIENT_BALANCE"]
+            valid_results = [result for result in results if result[0] == "OK"]
 
             # If there are no valid results, return an error
             if len(valid_results) == 0:
-                if any([result[0] == "SCRIPT_ERROR" for result in results]):
+                if any(result[0] == "SCRIPT_ERROR" for result in results):
                     return ("SCRIPT_ERROR", None)
                 else:
                     return ("INSUFFICIENT_BALANCE", None)
@@ -152,8 +165,7 @@ class Simulator:
             # Calculate the average of the aggregated statistics
             averaged_statistics = Statistics.average_statistics(aggregated_statistics)
 
-            # Return the result and the averaged statistics
             return ("OK", averaged_statistics)
+
         except Exception as e:
-            # Catch any exceptions and return an error
             return ("SIMULATION_ERROR", None)

@@ -30,8 +30,7 @@ class History:
 
 
 class Engine:
-    def __init__(self, user_info):
-        self._callback_event = asyncio.Event()
+    def __init__(self, user_info, ctx):
         self._callback_counter = 0
         self._event_callbacks = {
             "GAME_STARTING": [],
@@ -50,12 +49,40 @@ class Engine:
         self.wager = None
         self.payout = None
         self.cashedAt = None
+        self._callback_promises = []
+        self._ctx = ctx
 
     def on(self, event, callback):
-        def wrapped_callback(*args):
-            callback(*args)
-            self._done()
+        # Wrap the callback in a Promise that resolves when the callback completes
+        wrapped_callback = lambda *args: self._wrap_callback(callback, *args)
         self._event_callbacks[event].append(wrapped_callback)
+
+    def _wrap_callback(self, callback, *args):
+        # Create a Promise that resolves when the callback completes
+        promise_code = """
+        new Promise((resolve, reject) => {
+            try {
+                resolve(callback.apply(null, args));
+            } catch (e) {
+                reject(e);
+            }
+        })
+        """
+        promise = self._ctx.eval(promise_code, callback=callback, args=args)
+        self._callback_promises.append(promise)
+        return promise
+
+    async def _emit(self, event, *args):
+        self._callback_counter += len(self._event_callbacks[event])
+        if self._callback_counter > 0:
+            promises = []
+            for callback in self._event_callbacks[event]:
+                promise = callback(*args)
+                promises.append(promise)
+            
+            # Wait for all promises to resolve
+            await asyncio.gather(*[promise.get() for promise in promises])
+            self._callback_promises = []
 
     def off(self, event, callback):
         self._event_callbacks[event].remove(callback)
@@ -93,15 +120,6 @@ class Engine:
 
     def cashOut(self):
         pass
-
-    async def _emit(self, event, *args):
-        self._callback_counter += len(self._event_callbacks[event])
-        if self._callback_counter > 0:
-            self._callback_event.clear()
-        for callback in self._event_callbacks[event]:
-            callback(*args)
-        if self._callback_counter > 0:
-            await self._wait_for_callbacks()
 
     async def _nextGame(self, gameResult):
         self.gameId = gameResult['id']
@@ -150,14 +168,3 @@ class Engine:
         # Emit the game ended event
         self.gameState = "GAME_ENDED"
         await self._emit('GAME_ENDED')
-        
-
-    def _done(self):
-        self._callback_counter -= 1
-        if self._callback_counter == 0:
-            self._callback_event.set()
-
-    async def _wait_for_callbacks(self):
-        self._callback_event.set()
-        while self._callback_event.is_set():
-            await asyncio.sleep(0.1)
