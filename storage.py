@@ -218,7 +218,7 @@ class Storage:
                     json.dumps(script_obj.config)
             ))
             self.conn.commit()
-            return script_obj.js_file_path
+            return script_dict['id']
         except sqlite3.Error as e:
             logging.error(f"An error occurred while saving script: {e}")
             self.conn.rollback()

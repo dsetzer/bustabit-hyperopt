@@ -306,7 +306,7 @@ class PSOptimizer:
     def save_final_result(self):
         final_state = {
             "optimization_id": self.optimization_id,
-            "script_obj": self.script_obj,
+            "script_id": self.script_obj.script_id,
             "initial_balance": self.initial_balance,
             "num_particles": self.num_particles,
             "max_iter": self.max_iter,
@@ -320,4 +320,3 @@ class PSOptimizer:
             "current_iteration": self.current_iteration
         }
         self.storage.update_optimization(self.optimization_id, final_state)
-
